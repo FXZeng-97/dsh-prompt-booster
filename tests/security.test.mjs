@@ -24,6 +24,7 @@ import {
   looksLikeAnswer,
   buildEnhanceUserText,
   isSameText,
+  isShallowVariant,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
@@ -244,7 +245,7 @@ test('base equal to draft falls back to fresh enhance', () => {
   assert.equal(text.includes('【原句'), false)
 })
 
-/* ---------- 10. 每次增强要有微调（实质相同检测） ---------- */
+/* ---------- 10. 每次增强要有"表达层面"的变化 ---------- */
 test('same-text is insensitive to spaces and punctuation', () => {
   assert.equal(isSameText('请列出A。请给出B。', '请列出 A，请给出 B'), true)
   assert.equal(isSameText('请列出A并给出B。', '请列出A，并给出B。'), true)
@@ -252,6 +253,25 @@ test('same-text is insensitive to spaces and punctuation', () => {
 test('same-text detects real wording changes', () => {
   assert.equal(isSameText('请列出A并给出B。', '请说明A并列出B。'), false)
   assert.equal(isSameText('请列出发布到 GitHub 的步骤。', '请列出发布到 GitHub 的操作步骤。'), false)
+})
+test('shallow-variant flags synonym/connector-only rewrites', () => {
+  assert.equal(
+    isShallowVariant(
+      '请列出发布到 GitHub 还需要提供哪些东西，并给出对应的操作步骤。',
+      '请说明发布到 GitHub 还需要提供哪些东西，并列出操作步骤。',
+    ),
+    true,
+  )
+  assert.equal(isShallowVariant('请列出A并给出B。', '请给出A并列出B。'), true)
+})
+test('shallow-variant accepts real restructure', () => {
+  assert.equal(
+    isShallowVariant(
+      '请列出发布到 GitHub 还需要提供哪些东西，并给出对应的操作步骤。',
+      '发布到 GitHub 前需要准备哪些东西？请按操作步骤列出来。',
+    ),
+    false,
+  )
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

@@ -93,7 +93,8 @@ const SYSTEM_PROMPT = [
   "18. 消息里带【原句】和【上一版增强】时按纠正流程处理：原句是最高权重，目标、对象、事实、语气都以原句为准。",
   "19. 上一版可能对也可能错：只修正不符合原意、没有依据、或把问题答成答案的部分；正确的措辞、结构、已有要求必须保留，不要整段重写，也不要因为再次增强就否定上一版。",
   "20. 不新增原句没有的要求；输出长度不超过原句与上一版中较大者的 1.1 倍。",
-  "21. 每次增强都要有可见的微调：即使上一版已基本正确，也要至少改一处措辞或语序（更贴近原句、更简洁、更顺口），不得原样返回；但目标、事实、要求、受众不变。",
+  "21. 每次增强都要有可见的表达变化：重新理解原句意图，换一种更准确或更顺的句式（调整句子结构、拆分/合并短句、调整信息顺序、换用更准确的对象表述）。",
+  "22. 不许用换标点、换连接词、换同义词来充当变化（「请列出」↔「请给出」这种不算）；变化要落在语义理解和文字表达上，但目标、事实、要求、受众不能变。",
 ].join('\n')
 
 /** 上一版答成答案时的修正提示（保留正确内容，只把答案改回请求）。 */
@@ -104,13 +105,22 @@ const ANSWER_GUARD_PROMPT = [
   '不要整段重写，不要退化成空泛模板。',
 ].join('\n')
 
-/** 再次增强输出与上一版完全相同时的微调提示。 */
-const VARIATION_PROMPT = [
-  '【本次特别注意】',
-  '上一版与当前完全一样，看不出再次增强的变化。',
-  '请在不改变目标、事实、要求、受众的前提下，至少改一处措辞或语序（更贴近原句、更简洁、更顺口）。',
-  '不得原样返回，也不得新增要求。',
-].join('\n')
+/** 再次增强与上一版太接近时的两种更强改写提示（先结构、再表达）。 */
+const VARIATION_PROMPTS = [
+  [
+    '【本次特别注意】',
+    '上一版与当前太接近，几乎只是换了同义词或连接词。',
+    '请在不改变目标、事实、要求、受众的前提下，改变句子结构或组织顺序：',
+    '例如合并或拆分短句、调整「先…再…」的顺序、换用更准确的对象表述。',
+    '不得只改标点、连接词或同义词，也不得新增要求。',
+  ].join('\n'),
+  [
+    '【本次特别注意】',
+    '上一版与当前仍然很像，需要换一种表达方式。',
+    '请先想清楚原句真正想要什么，再用另一种句式（问句/请求句/分句式）表达；',
+    '可以调整信息顺序和重点位置，但原意、事实、要求不变，不得新增要求。',
+  ].join('\n'),
+]
 
 /** 比较两次增强文本是否"实质相同"（忽略空白与标点）。 */
 function normalizeForCompare(text) {
@@ -121,6 +131,36 @@ function normalizeForCompare(text) {
 
 function isSameText(a, b) {
   return normalizeForCompare(a) === normalizeForCompare(b)
+}
+
+function bigramSet(text) {
+  const chars = [...text]
+  const set = new Set()
+  for (let index = 0; index < chars.length - 1; index += 1) set.add(chars[index] + chars[index + 1])
+  return set
+}
+
+/** 字符二元组 Jaccard 相似度（0~1）：用来识别"只换词不换结构"的浅层改写。 */
+function bigramSimilarity(a, b) {
+  const left = normalizeForCompare(a)
+  const right = normalizeForCompare(b)
+  if (!left || !right) return 0
+  if (left === right) return 1
+  const leftSet = bigramSet(left)
+  const rightSet = bigramSet(right)
+  if (!leftSet.size || !rightSet.size) return 0
+  let inter = 0
+  for (const gram of leftSet) if (rightSet.has(gram)) inter += 1
+  return inter / (leftSet.size + rightSet.size - inter)
+}
+
+/** 与上一版"几乎一样"（含只换标点/连接词/同义词）返回 true。 */
+function isShallowVariant(previous, next) {
+  const left = normalizeForCompare(previous)
+  const right = normalizeForCompare(next)
+  if (!left || !right) return true
+  if (left === right) return true
+  return bigramSimilarity(previous, next) >= 0.55
 }
 
 /** 首次增强直接用草稿；多次增强时把原句作为最高权重、上一版作为待纠正的候选。 */
@@ -943,38 +983,47 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
       }
     }
 
-    // 再次增强必须有一点变化：与上一版实质相同就调高温度、要求只改措辞/语序再试一次
-    if (isCorrection && isSameText(text, cleaned)) {
-      diag(cfg.diag, { kind: 'enhance-variation', same: true, chars: [...cleaned].length })
-      try {
-        const varied = await streamOnce({
-          llm,
-          route,
-          cfg,
-          text: promptText,
-          effort: plan.effort,
-          maxTokens: plan.maxTokens,
-          signal,
-          temperatureOverride: 0.6,
-          systemOverride: cfg.systemPrompt + '\n\n' + VARIATION_PROMPT,
-        })
-        attempts.push({
-          label: 'variation',
-          effort: varied.effort,
-          maxTokens: plan.maxTokens,
-          finish: varied.finishReason ? varied.finishReason.kind : 'none',
-          rawChars: varied.output.length,
-          ms: varied.ms,
-        })
-        if (!varied.finishReason || (varied.finishReason.kind !== 'error' && varied.finishReason.kind !== 'aborted')) {
+    // 再次增强要有"表达层面"的变化：与上一版相同/只换词就调高温度、要求改句式再试
+    if (isCorrection && (isSameText(text, cleaned) || isShallowVariant(text, cleaned))) {
+      const shallow = !isSameText(text, cleaned)
+      diag(cfg.diag, { kind: 'enhance-variation', reason: shallow ? 'shallow' : 'same', chars: [...cleaned].length })
+      let best = null
+      for (let attemptIndex = 0; attemptIndex < VARIATION_PROMPTS.length; attemptIndex += 1) {
+        try {
+          const variationTemp = attemptIndex === 0 ? 0.8 : 1.05
+          const varied = await streamOnce({
+            llm,
+            route,
+            cfg,
+            text: promptText,
+            effort: plan.effort,
+            maxTokens: plan.maxTokens,
+            signal,
+            temperatureOverride: variationTemp,
+            systemOverride: cfg.systemPrompt + '\n\n' + VARIATION_PROMPTS[attemptIndex],
+          })
+          attempts.push({
+            label: 'variation-' + (attemptIndex + 1),
+            effort: varied.effort,
+            maxTokens: plan.maxTokens,
+            finish: varied.finishReason ? varied.finishReason.kind : 'none',
+            rawChars: varied.output.length,
+            ms: varied.ms,
+          })
+          if (varied.finishReason && (varied.finishReason.kind === 'error' || varied.finishReason.kind === 'aborted')) {
+            continue
+          }
           const variedCleaned = cleanOutput(varied.output)
-          if (variedCleaned && !looksLikeAnswer(text, variedCleaned) && !isSameText(text, variedCleaned)) {
+          if (!variedCleaned || looksLikeAnswer(text, variedCleaned)) continue
+          if (!isSameText(text, variedCleaned) && !isShallowVariant(text, variedCleaned)) {
             return buildResult(variedCleaned, varied, 'ok', 'varied')
           }
+          if (!best) best = { value: variedCleaned, res: varied }
+        } catch {
+          /* 微调重试失败：尝试下一种提示 */
         }
-      } catch {
-        /* 微调重试失败：返回原结果 */
       }
+      if (best) return buildResult(best.value, best.res, 'ok', 'shallow')
       return buildResult(cleaned, result, 'ok', 'same')
     }
 
@@ -1327,6 +1376,8 @@ export {
   draftIsAnswer,
   buildEnhanceUserText,
   isSameText,
+  isShallowVariant,
+  bigramSimilarity,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
