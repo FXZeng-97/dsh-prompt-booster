@@ -23,6 +23,7 @@ import {
   outputLengthCap,
   looksLikeAnswer,
   buildEnhanceUserText,
+  buildTaskHint,
   isSameText,
   isShallowVariant,
   recentFromBody,
@@ -272,6 +273,28 @@ test('shallow-variant accepts real restructure', () => {
     ),
     false,
   )
+})
+
+/* ---------- 11. 目标解析 / 人物视角 提示 ---------- */
+test('task hint detects vague visual goal', () => {
+  const hint = buildTaskHint('帮我把这个页面的按钮改好看点')
+  assert.equal(hint.includes('判定标准'), true)
+  assert.equal(hint.includes('维度'), true)
+})
+test('task hint detects audience', () => {
+  const hint = buildTaskHint('给应用部总监写一段话，说明这个插件能提升效率')
+  assert.equal(hint.includes('受众'), true)
+  assert.equal(hint.includes('评判标准'), true)
+})
+test('task hint covers goal + audience together', () => {
+  const hint = buildTaskHint('把发布到 GitHub 的步骤整理清楚，给新同事看')
+  assert.equal(hint.includes('模糊目标'), true)
+  assert.equal(hint.includes('受众'), true)
+})
+test('task hint skips mechanical transforms', () => {
+  assert.equal(buildTaskHint('把这段说明压缩到 100 字以内'), '')
+  assert.equal(buildTaskHint('把这段话翻译成英文'), '')
+  assert.equal(buildTaskHint('把按钮改成蓝色'), '')
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

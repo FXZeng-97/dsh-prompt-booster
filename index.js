@@ -63,7 +63,7 @@ const SYSTEM_PROMPT = [
   "【原则】",
   "1. 忠于原意：目标、对象、篇幅、语气不变。不加用户没提的交付范围。输出语言必须和草稿一致：英文草稿全用英文，中文草稿全用中文，禁止混用。",
   "2. 不编造：数据、型号、路径、结论一律不能编。用户给的数字照抄。缺指标就写「作概括表述」。",
-  "3. 草稿没说的受众、结构、篇幅、格式，一律不补。只补草稿里明确表达过的东西。",
+  "3. 草稿没说的受众、结构、篇幅、格式、交付范围，一律不补；例外：模糊目标的判定维度和受众的判定标准属于执行方法（见【目标解析】【人物视角】），不算新增需求。",
   "4. 「…吧？」「应该…了吧」「可以写个…」是确定语气（用户已经知道或已经决定），按事实和结论直接写，不要改成「若…则…」，也不要让执行者再确认。只有真正的疑问（「…吗？」「是否…？」「要不要…？」「哪个？」）才保留成疑问或条件句。",
   "",
   "【只改写，不回答（最重要）】",
@@ -74,9 +74,20 @@ const SYSTEM_PROMPT = [
   "4e. 问句只改写成一句请求，不要把同一个要求写两遍（如「请列出…请给出…」）。",
   "5. 上下文只用来消解指代（「这个插件」「这段说明」「初版」指什么）和核对数据来源；不得用来新增受众、结构、篇幅、格式要求。最近对话按轮取最近 2 轮：以【最近一轮对话】为主（约 65% 参考权重），【更早一轮对话】只作辅助（约 35%）；两者冲突时以最近一轮为准。",
   "",
+  "【目标解析：模糊目标 → 判定维度（通用规则）】",
+  "G1. 草稿出现模糊的质量/改进目标（好看、美观、好用、高级、专业、清楚、简洁、流畅、稳定、快、高效、有说服力、优化、改进、提升、整理、美化、体验、效果、质量…）时，先解析目标，再写任务。",
+  "G2. 解析三步：① 确定对象（草稿里的对象；没有就用上下文能确定的泛指，如「当前页面」「这段内容」「现有方案」，不编具体对象）；② 先定义「好」在本对象上的判定标准，展开成 3~5 个可验证维度；③ 任务写成「请从 A、B、C…角度分析<对象>的现状，指出问题，给出优化方案/建议（可先试优化，并说明预期效果）」。",
+  "G3. 维度按「目标词 + 对象」选择，不能按对象套错类：同一对象不同目标用不同维度（页面的『好看』用视觉维度，页面的『体验/好用』用交互维度）。示例，不要照抄、不要堆满：页面/按钮「好看」→ 布局对齐、间距节奏、颜色与对比、视觉层级与重点、组件一致性、点击反馈；页面/产品「体验/好用」→ 可发现性、操作路径、反馈及时性、错误处理、状态一致、可访问性、性能感知；文档「清楚」→ 结构、术语一致、信息完整、示例、无歧义、可执行步骤；方案「专业」→ 目标范围、依据数据、可行性与成本、风险限制、落地步骤、验收标准；性能「提升」→ 基线测量、瓶颈定位、优化手段、预期收益、回归验证；日志「整理」→ 字段规范、去重合并、分类归档、命名规则、异常提取、保留策略；代码「整洁」→ 命名、分层、重复度、可读性、注释、测试。",
+  "G4. 这些维度是「分析角度/执行方法」，不是新增需求：不编造事实、不替用户决定具体改法；只让执行端先分析、再给方案或建议。",
+  "G5. 纯机械任务（翻译、压缩到 N 字、改格式、提取字段、改写一句）不套用目标解析，按原要求直接改写。",
+  "",
+  "【人物视角：受众 → 判定标准（通用规则）】",
+  "P1. 草稿出现「给X看/向X说明/汇报给X/让X判断/给X评审」时，先解析 X：角色、要做的决定、评判标准、需要的信息；任务写成「以 X 的视角，按 X 的判断标准组织」，并说明输出形式（结论、证据、风险、建议等）。",
+  "P2. 角色标准示例（按对象选 2~4 条，不要堆）：总监/老板→ 值不值得做、投入与成本、收益、风险、推进建议（结论先行）；新同事→ 从零开始、每步可照做、前置条件、常见坑（按操作顺序）；客户→ 对他的价值、可信证据、成本周期、交付与售后；评审/专家→ 目标范围、依据、备选方案对比、风险边界；投资/商务→ 市场增长、数据、竞争、回报与风险。",
+  "P3. 受众是「组织信息的方式」，不是新增事实：草稿没写受众就不写；写了就必须按该角色的关注点组织，不能只贴标签。",
+  "",
   "【允许补全（仅当草稿明确要求时）】",
   "6. 写文档/报告/方案：可给 3~4 个短结构词，如「价值概述、能力亮点、落地形态」；用户说「写一句/一段/改写这句」时保持原形态，不拆分。",
-  "7. 草稿明确写了「给谁看」：写成「以<该受众>的视角陈述」。汇报/说明类按他关心的 2~3 个方面拆分；步骤/操作类按执行顺序拆分。没写受众就不写。",
   "8. 草稿明确写了篇幅/格式：照原意落成一句可执行的话；没写就绝不加「一页内」「字数」等要求。",
   "",
   "【执行端可执行性】",
@@ -175,8 +186,7 @@ function isShallowVariant(previous, next) {
 }
 
 /** 首次增强直接用草稿；多次增强时把原句作为最高权重、上一版作为待纠正的候选。 */
-function buildEnhanceUserText({ text, base, contextText }) {
-  const draft = String(text || '')
+function buildEnhanceUserText({ text, base, contextText }) {  const draft = String(text || '')
   const original = typeof base === 'string' ? base.trim() : ''
   if (!original || original === draft.trim()) {
     return contextText ? `${contextText}\n\n【草稿】\n${draft}` : draft
@@ -190,6 +200,41 @@ function buildEnhanceUserText({ text, base, contextText }) {
       '保留正确的措辞、结构和已有要求；不新增原句没有的要求；直接输出最终提示词。',
   )
   return parts.join('\n\n')
+}
+
+/* 模糊目标/受众检测：只在 Host 侧追加"解析提示"，帮助模型按通用规则展开。 */
+const VAGUE_GOAL_RE =
+  /(好看|美观|漂亮|好用|易用|高级|专业|清楚|清晰|简洁|流畅|稳定|高效|有说服力|优化|改进|提升|整理|美化|体验|效果|质量|靠谱|合理|完善|加强|丰富|精简|打磨|更好|更顺手|更有价值)/
+const MECHANICAL_RE =
+  /(翻译成|翻译为|压缩到|缩到|扩写到|改成|改为|提取|导出|转换成|换算|写一句|改写这句|补全|转成|格式|精简到|缩短到)/
+const AUDIENCE_RE =
+  /(?:给|向|让|供)([^，。；\n]{1,16}?)(?:看|汇报|说明|判断|评审|过目|决策|阅读)|(总监|老板|领导|客户|新同事|同事|团队|评审|专家|投资|甲方|用户)/
+
+/** 根据草稿返回"任务解析提示"；无模糊目标/受众时返回空。 */
+function buildTaskHint(text) {
+  const value = String(text || '').trim()
+  if (!value) return ''
+  const vague = VAGUE_GOAL_RE.test(value)
+  const mechanical = MECHANICAL_RE.test(value) && !vague
+  const goal = vague && !mechanical
+  const audienceMatch = AUDIENCE_RE.exec(value)
+  const audience = !!audienceMatch && !/^(我|自己|我们)$/.test(audienceMatch[1] || '')
+  if (!goal && !audience) return ''
+  const lines = ['【任务解析提示】']
+  if (goal) {
+    lines.push(
+      '- 草稿含模糊目标：按【目标解析】先定义「好」在本对象上的判定标准，展开 3~5 个可验证维度，' +
+        '写成「从这些角度分析现状→指出问题→给出优化方案/建议」。',
+    )
+  }
+  if (audience) {
+    lines.push(
+      '- 草稿指定了受众：按【人物视角】先分析该角色的决策关注点和评判标准，' +
+        '任务按该视角组织，不要只贴「给X看」的标签。',
+    )
+  }
+  lines.push('- 维度/标准是分析角度，不是新增事实或具体改法；原意、对象、约束不变。')
+  return lines.join('\n')
 }
 
 /* ------------------------------------------------------------------ */
@@ -928,8 +973,10 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
     throw Object.assign(new Error('未找到可用模型路由：请在插件 config 里指定 provider/model，或先配置默认模型'), { status: 503 })
   }
   // 多次增强 = 连续纠正：原句是最高权重，上一版作为待纠正候选；首次增强只看草稿。
-  const promptText = buildEnhanceUserText({ text, base, contextText })
+  const basePromptText = buildEnhanceUserText({ text, base, contextText })
   const isCorrection = !!(base && String(base).trim() && String(base).trim() !== String(text).trim())
+  const taskHint = buildTaskHint(isCorrection ? String(base || text) : text)
+  const promptText = taskHint ? basePromptText + '\n\n' + taskHint : basePromptText
 
   const startedAt = Date.now()
   const efforts = await resolveEfforts(llm, route, signal)
@@ -1386,6 +1433,7 @@ export {
   looksLikeAnswer,
   draftIsAnswer,
   buildEnhanceUserText,
+  buildTaskHint,
   isSameText,
   isShallowVariant,
   bigramSimilarity,
