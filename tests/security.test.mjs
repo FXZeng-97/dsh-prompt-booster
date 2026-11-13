@@ -356,5 +356,34 @@ test('complexity: multi-file / long / citation hints', () => {
   assert.equal(buildTaskHint('按参考链接整理成文档').includes('引用/附件'), true)
 })
 
+/* ---------- 13. 否定/范围、长文档续写、批量断点、交付形态 ---------- */
+test('negation and scope constraints are preserved as hints', () => {
+  assert.equal(buildTaskHint('不要用列表，改成一段话').includes('否定/范围约束'), true)
+  const hint = buildTaskHint('只改错别字，别动内容')
+  assert.equal(hint.includes('否定/范围约束'), true)
+  assert.equal(hint.includes('不得改写成正向要求'), true)
+})
+test('long document / continuation hint', () => {
+  const hint = buildTaskHint('把这份长文档拆成章节并续写下一段')
+  assert.equal(hint.includes('长文档/续写'), true)
+  assert.equal(hint.includes('分段边界'), true)
+})
+test('batch hint includes checkpoint and failure summary', () => {
+  const hint = buildTaskHint('批量处理列表里的每一项，支持断点续跑')
+  assert.equal(hint.includes('多文件/批量'), true)
+  assert.equal(hint.includes('断点续跑'), true)
+  assert.equal(hint.includes('汇总成功/失败'), true)
+})
+test('deliverable format hint', () => {
+  const hint = buildTaskHint('把结果输出成 JSON 表格')
+  assert.equal(hint.includes('交付形态'), true)
+  assert.equal(hint.includes('未指定不擅自添加'), true)
+})
+test('rewrite-style hint avoids asking the user', () => {
+  const hint = buildTaskHint('换一种风格重写这段话，但保留原意')
+  assert.equal(hint.includes('改写/换风格'), true)
+  assert.equal(hint.includes('不要要求用户补充'), true)
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exitCode = 1

@@ -1,6 +1,6 @@
 {
   "name": "@local/prompt-booster",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "type": "module",
   "description": "提示词增强：在 Web GUI 输入框工具栏增加「增强」按钮，用模型把草稿改写成更清楚、可执行的提示词，并支持一键撤销。",
   "license": "MIT",
