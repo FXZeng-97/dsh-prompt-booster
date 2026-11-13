@@ -426,5 +426,34 @@ test('modality issue accepts preserved modality', () => {
   assert.equal(modalityIssue('可以周五前给我吗', '请确认能否在周五前给我。'), '')
 })
 
+/* ---------- 14. 变更类任务的安全执行 ---------- */
+test('safety hint flags code modification', () => {
+  const hint = buildTaskHint('帮我把这个函数改成异步的')
+  assert.equal(hint.includes('变更类任务'), true)
+  assert.equal(hint.includes('先备份'), true)
+})
+test('safety hint flags document modification', () => {
+  assert.equal(buildTaskHint('把这个文档里的 2024 改成 2025').includes('变更类任务'), true)
+})
+test('safety hint flags batch deletion', () => {
+  const hint = buildTaskHint('批量把项目里所有 console.log 删掉')
+  assert.equal(hint.includes('变更类任务'), true)
+})
+test('safety hint flags database migration', () => {
+  assert.equal(buildTaskHint('更新数据库里的用户表结构').includes('变更类任务'), true)
+})
+test('safety hint flags outbound communication', () => {
+  const hint = buildTaskHint('给客户发邮件说项目要延期')
+  assert.equal(hint.includes('对外发送类'), true)
+})
+test('safety hint flags design asset modification', () => {
+  assert.equal(buildTaskHint('改一下这张图的颜色').includes('变更类任务'), true)
+})
+test('safety hint skips read-only analysis and mechanical transforms', () => {
+  assert.equal(buildTaskHint('分析一下这段代码为什么慢').includes('变更类任务'), false)
+  assert.equal(buildTaskHint('把这段说明压缩到 100 字以内').includes('变更类任务'), false)
+  assert.equal(buildTaskHint('把这段文字翻译成英文').includes('变更类任务'), false)
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exitCode = 1

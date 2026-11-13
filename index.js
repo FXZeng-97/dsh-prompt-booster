@@ -113,6 +113,20 @@ const SYSTEM_PROMPT = [
   "R6. 迭代方向：草稿说换方向/重写/否定上一版时，按新方向；说只改某处时，明确保留其余部分。",
   "R7. 以上是执行方法，不是新增业务需求；不得编造事实、数字、对象、受众。",
   "",
+  "【变更类任务：备份→改动→验证→汇报】",
+  "S1. 草稿属于「修改/重构/删除/覆盖/迁移/批量替换/发布」类任务时，加一句安全执行要求：",
+  "    「先备份或建快照，只改目标范围，异常立即停止并汇报，完成后给改动清单和验证结果。」",
+  "S2. 按对象最多再补 1~2 条（不要堆）：",
+  "    - 代码：建分支或提交快照，保持原有行为，改完跑测试，失败回滚。",
+  "    - 文档/表格：保留原稿副本，只改指定部分，不删无关内容，改完给修改说明。",
+  "    - 配置/数据库/部署：先备份，写清影响范围与回滚步骤，先灰度或小范围验证。",
+  "    - 设计稿/图片/音视频：保留源文件，非破坏编辑，导出副本。",
+  "    - 批量文件：先小样本验证，逐项处理，失败跳过并汇总，可恢复。",
+  "    - 对外发送/删除/覆盖：执行前给影响清单并等用户确认，不直接发送/删除。",
+  "S3. 异常处理：报错、结果不符或高风险信号 → 停止并汇报，不继续猜测性修改。",
+  "S4. 完成后：列改动文件/位置、验证结果、残余风险；不要只说完成。",
+  "S5. 这些是执行方法，不改原任务目标；输出语言保持精简，通常 1 句安全要求即可。",
+  "",
   "【领域约束与复杂场景】",
   "D1. 消息带【领域约束提示】时，按该领域补必要约束（授权范围、依据与复核、数据口径、备份/回滚、脱敏、术语表等）；只约束做法，不改目标、不加业务事实。",
   "D2. 长文档：先结构/提纲再逐节展开，章节清晰、术语一致，控制单次输出长度；多文件/批量：逐项处理、说明输出位置与命名、失败项单独汇总；多语言：明确目标语言、保留术语表、代码/命令/路径不翻译；引用/附件：保留原链接、路径、文件名与格式，不编造。",
@@ -364,6 +378,23 @@ function buildFidelityHint(value) {
   return lines
 }
 
+/** 变更类/对外发送类任务的安全执行提示。 */
+const MUTATION_VERB_RE = /(改|修改|重构|修复|更新|升级|删除|删掉|覆盖|重命名|移动|迁移|替换|批量|部署|上线|发布|回滚|回退|加功能|去掉|清理|调整)/
+const MUTATION_OBJECT_RE =
+  /(代码|函数|模块|文件|目录|项目|仓库|数据库|表|配置|文档|表格|excel|ppt|设计稿|图片|图|视频|脚本|接口|依赖|版本|数据)/
+const OUTBOUND_RE = /(发邮件|发送|回复客户|通知客户|对外发布|群发|公告)/
+function buildSafetyHint(value) {
+  const text = String(value || '')
+  const lines = []
+  if (MUTATION_VERB_RE.test(text) && MUTATION_OBJECT_RE.test(text)) {
+    lines.push('- 变更类任务：先备份/建快照，只改目标范围，异常立即停止并汇报；完成后给改动清单、验证结果和回滚方式。')
+  }
+  if (OUTBOUND_RE.test(text)) {
+    lines.push('- 对外发送类：先给草稿和影响清单，等用户确认后再发送；保留原文与版本。')
+  }
+  return lines
+}
+
 /** 根据草稿返回"任务解析提示"；无匹配时返回空。 */
 function buildTaskHint(text) {
   const value = String(text || '').trim()
@@ -382,7 +413,8 @@ function buildTaskHint(text) {
     .map((pack) => pack.line)
   const complexityLines = buildComplexityHints(value)
   const fidelityLines = buildFidelityHint(value)
-  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length) return ''
+  const safetyLines = buildSafetyHint(value)
+  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length) return ''
   const lines = ['【任务解析提示】']
   if (goal) {
     lines.push(
@@ -406,6 +438,7 @@ function buildTaskHint(text) {
   for (const line of domainLines) lines.push('- 领域约束：' + line)
   for (const line of complexityLines) lines.push('- 复杂场景：' + line)
   for (const line of fidelityLines) lines.push(line)
+  for (const line of safetyLines) lines.push(line)
   lines.push('- 维度/标准/契约/领域约束是执行方法，不是新增事实或具体改法；原意、对象、约束不变。')
   return lines.join('\n')
 }
