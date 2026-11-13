@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Prompt Enhancer",
+    "description": "Adds an Enhance button to the composer toolbar: rewrites your draft into a more complete, executable prompt with the model, and lets you undo it."
+  }
+}

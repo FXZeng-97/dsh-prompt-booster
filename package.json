@@ -1,0 +1,46 @@
+{
+  "name": "@local/prompt-booster",
+  "version": "0.1.4",
+  "type": "module",
+  "description": "提示词增强：在 Web GUI 输入框工具栏增加「增强」按钮，用模型把草稿改写成更清楚、可执行的提示词，并支持一键撤销。",
+  "license": "MIT",
+  "author": "Prompt Booster contributors",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "prompt",
+    "prompt-enhancer"
+  ],
+  "scripts": {
+    "test": "node tests/security.test.mjs"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "SECURITY.md",
+    "COMPLIANCE.md",
+    "LICENSE",
+    "tests/security.test.mjs"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# @local/prompt-booster —— 本 bundle 的 patch 层。
+#
+# 只插入一行 Host 插件；渲染在浏览器侧（client.js）完成。
+# Host 插件负责两件事：
+#   1. 注册 /prompt-booster 路由（health / enhance / diag）；
+#   2. 调用 ctx.llm 流式改写草稿（provider/model 默认取 agentDefaultModel）。
+#
+# 可调项（需要时在下面 config 里取消注释；留空即用 index.js 中的默认值）：
+#   provider / model          固定增强所用模型路由（两个必须同时给）
+#   reasoningEffort           该模型支持的 effort id，缺省用最低 effort 快速路径
+#   temperature               默认 0（最低随机，保证多次增强一致）
+#   maxInputChars             默认 20000（超过直接拒绝，不截断）
+#   maxOutputTokens           默认 500（忠于原意的最小增强；兜底重试会放大到至少 4096）
+#   timeoutMs                 默认 60000
+#   projectContext            是否带上当前项目上下文（默认 true，仅用于消解指代）
+#   contextMaxChars           项目上下文最多注入字符数（默认 1000）
+#   conversationContext       是否带上最近对话（默认 true；2 轮/4 条，最近一轮 65%、更早一轮 35%，共 800 字）
+#   rateLimitPerMinute        /enhance 每分钟每 IP 上限（默认 20）
+#   maxConcurrentEnhance      /enhance 并发上限（默认 2）
+#   allowClientProject        允许客户端 cwd（默认 false，仅测试；默认取会话元数据）
+#   systemPrompt              覆盖内置的增强指令
+#   diag                      是否写 data/diag.jsonl 诊断（默认 true）
+#
+# 安全相关（Host/端口校验、http 来源页面 token、限流）由插件自动处理，无需配置。
+- insert:
+    - id: prompt-booster
+      name: '@local/prompt-booster'
+      # config:
+      #   provider: your-provider
+      #   model: your-model
+      #   maxOutputTokens: 900
+      #   projectContext: true

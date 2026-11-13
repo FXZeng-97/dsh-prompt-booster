@@ -1,0 +1,8 @@
+# 运行时/诊断产物，不要提交
+data/
+*.log
+
+# 依赖与系统文件
+node_modules/
+.DS_Store
+Thumbs.db
