@@ -26,6 +26,7 @@ import {
   buildTaskHint,
   isSameText,
   isShallowVariant,
+  modalityIssue,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
@@ -392,6 +393,37 @@ test('action-owner hint preserves who does what', () => {
 test('action-owner hint works for reversed roles', () => {
   const hint = buildTaskHint('你先更新 harness，我再验证')
   assert.equal(hint.includes('动作归属'), true)
+})
+test('fidelity hint catches numbers, time and modality', () => {
+  const hint = buildTaskHint('尽量在周五前给我 3 个方案，不要超过 2 页')
+  assert.equal(hint.includes('保真核对'), true)
+  assert.equal(hint.includes('数量/时间/条件/否定/情态'), true)
+})
+test('fidelity hint catches condition and order', () => {
+  const hint = buildTaskHint('先跑测试，有问题再回滚')
+  assert.equal(hint.includes('保真核对'), true)
+})
+test('fidelity hint catches quote and source', () => {
+  const hint = buildTaskHint('客户原话是界面不够专业，你按这个改')
+  assert.equal(hint.includes('保真核对'), true)
+})
+test('fidelity hint catches scope and tentative wording', () => {
+  assert.equal(buildTaskHint('把 A 改成 B，其他不动').includes('保真核对'), true)
+  assert.equal(buildTaskHint('暂时先这样，之后再说').includes('保真核对'), true)
+})
+test('modality issue flags must-to-please downgrade', () => {
+  assert.notEqual(modalityIssue('必须周五前给我 3 个方案', '请在周五前给我 3 个方案。'), '')
+})
+test('modality issue flags weak-to-strong upgrade', () => {
+  assert.notEqual(modalityIssue('尽量周五前给我', '必须在周五前给我。'), '')
+})
+test('modality issue flags question-to-directive', () => {
+  assert.notEqual(modalityIssue('可以周五前给我吗', '请你在周五前给我。'), '')
+})
+test('modality issue accepts preserved modality', () => {
+  assert.equal(modalityIssue('尽量在周五前给我 3 个方案', '请尽量在周五前给我 3 个方案。'), '')
+  assert.equal(modalityIssue('必须周五前给我 3 个方案', '请必须在周五前给我 3 个方案。'), '')
+  assert.equal(modalityIssue('可以周五前给我吗', '请确认能否在周五前给我。'), '')
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)

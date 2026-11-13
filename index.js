@@ -63,6 +63,11 @@ const SYSTEM_PROMPT = [
   "0e. 动作归属：「我/我们」做的事写成「我/我们先…」；「你/你们」「帮我/请你/麻烦你」做的事写成「请你…」。",
   "0f. 示例：①「我更新一下，你验证」→「我先更新，更新完成后你再验证。」；②「你先更新，我再验证」→「请你先更新，更新完成后我来验证。」；③「帮我更新 Harness」→「请更新 Harness 到新版本。」",
   "",
+  "【保真核对（输出前逐项对照原句）】",
+  "F1. 以下信息只能改表达，不能改语义：① 主语/动作归属；② 对象/指代；③ 数量、范围、程度；④ 时间、顺序、截止；⑤ 条件、前提、例外；⑥ 否定/禁止；⑦ 情态（必须/应该/可以/尽量/建议）；⑧ 比较/基准/优先级；⑨ 术语、数据、路径、型号；⑩ 交付物数量与形态；⑪ 责任人与验收人；⑫ 引述与来源（客户说/原话/要求）。",
+  "F2. 常见错误（必须避免）：把「我」改成「你」；把「尽量」改成「必须」；把「必须」改成「尽量/请」；把「3 个」改成「几个」；把「先 A 后 B」改成「B 或 A」；把「如果」改成无条件；把「不要」改成「要」；把「客户说」改成「我认为」；把「暂时/先这样」改成定稿；把「可以…吗」改成命令。",
+  "F3. 输出前按 F1 逐项核对；发现变化就改回；只输出最终提示词。",
+  "",
   "【原则】",
   "1. 忠于原意：目标、对象、动作归属（谁做）、篇幅、语气不变。不加用户没提的交付范围。输出语言必须和草稿一致：英文草稿全用英文，中文草稿全用中文，禁止混用。",
   "2. 不编造：数据、型号、路径、结论一律不能编。用户给的数字照抄。缺指标就写「作概括表述」。",
@@ -71,7 +76,7 @@ const SYSTEM_PROMPT = [
   "",
   "【只改写，不回答（最重要）】",
   "4a. 你是改写器，不是回答器：输出是给执行端的任务描述，不是任务结果；保持用户第一人称视角（我=用户，你=执行端），用户自己的动作保留为「我会/我先…」，不能改成对执行端的请求。禁止输出答案、解释、操作步骤、命令、清单内容。",
-  "4b. 草稿是问句（…吗/哪些/怎么/如何/多少/是否）时：改写成「请回答/请列出/请说明…」的请求，不得直接回答，也不得保留成反问句。",
+  "4b. 草稿是问句（…吗/哪些/怎么/如何/多少/是否）时：改写成「请回答/请列出/请说明…」的请求，不得直接回答，也不得保留成反问句。「可以…吗/能不能…/是否…」写成「请确认能否…/请回答是否…」，不得改写成命令。",
   "4c. 即使草稿要求「列出步骤/给出方案/写清楚」，也只写这个要求本身，不得展开具体步骤、条目或方案内容。",
   "4d. 草稿本身已经是答案/步骤清单时：改写成「请整理/列出…」的任务描述，删除答案内容，不要保留清单。",
   "4e. 问句只改写成一句请求，不要把同一个要求写两遍（如「请列出…请给出…」）。",
@@ -299,6 +304,66 @@ function buildComplexityHints(value) {
   return hints
 }
 
+/** 情态/句式保真：尽量≠必须，必须≠请，可以…吗≠命令。 */
+const WEAK_MODAL_RE = /(尽量|最好|建议|可以|不妨|可选)/
+const STRONG_MODAL_RE = /(必须|务必|一定|不得|禁止|不能|不要|别)/
+const QUESTION_MODAL_RE = /(可以[^。；\n]{0,20}吗|能不能|能否|是否|方便吗)/
+function modalityIssue(draft, output) {
+  const d = String(draft || '')
+  const o = String(output || '')
+  const dWeak = WEAK_MODAL_RE.test(d)
+  const dStrong = STRONG_MODAL_RE.test(d)
+  const dQuestion = QUESTION_MODAL_RE.test(d)
+  if (!dWeak && !dStrong && !dQuestion) return ''
+  const oWeak = WEAK_MODAL_RE.test(o)
+  const oStrong = STRONG_MODAL_RE.test(o)
+  if (dWeak && !dStrong && oStrong && !oWeak) return 'weak-to-strong'
+  if (dStrong && !oStrong) return 'strong-to-weak'
+  if (dQuestion && !/(确认|回答|是否|能否)/.test(o)) return 'question-to-directive'
+  return ''
+}
+
+/** 情态保真重试提示。 */
+const FIDELITY_GUARD_PROMPT = [
+  '【本次特别注意：保真核对未通过】',
+  '必须保持原句的情态与句式：',
+  '- 「尽量/最好/建议/可以」不得升级为「必须/务必/请」；',
+  '- 「必须/务必/一定/不得/禁止/不能」不得降级为「请/尽量」；',
+  '- 「可以…吗/能不能…/是否…」写成「请确认能否…/请回答是否…」，不得改成命令。',
+  '原意、对象、数量、时间、条件、来源都不变。',
+].join('\n')
+function buildFidelityHint(value) {
+  const text = String(value || '')
+  const lines = []
+  const risky = [
+    /[0-9一二三四五六七八九十百千万]+(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/,
+    /(今天|明天|昨天|本周|下周|周[一二三四五六日]|月底|月初|之前|以前|之后|以后|截止|deadline|周五)/,
+    /(如果|假如|若|除非|只要|一旦|万一|否则|先[^。；\n]{0,20}再|有问题再|不行再)/,
+    /(必须|务必|一定|应该|可以|尽量|最好|建议|允许|不能|不得|不要|别)/,
+    /(比|相比|不如|更好|更差|至少|最多|不超过|超过|小于|大于|优先)/,
+    /(客户|用户|老板|领导|他说|她说|原话|要求)/,
+    /(所有|全部|每个|部分|有些|仅|只|除了|等|之类|暂时|先这样|其他不动|其余不动|其他不变|只改|仅改)/,
+  ]
+  if (!risky.some((re) => re.test(text))) return lines
+  lines.push(
+    '- 保真核对：数量/时间/条件/否定/情态/比较/引述/范围必须原样保留，不得升级或降级；' +
+      '输出前按 F1 逐项对照原句，发现变化就改回。',
+  )
+  if (/(尽量|最好|建议|可以|必须|务必|一定|应该|允许|不能|不得)/.test(text)) {
+    lines.push('- 情态强度原样保留：「尽量/最好/建议」不得改成「必须/请」，「可以」不得改成「必须」。')
+  }
+  if (/(客户|用户|老板|领导|他说|她说|原话)/.test(text)) {
+    lines.push('- 引述/来源原样保留：保留「客户说/原话」这类归属，不要改成第一人称判断。')
+  }
+  if (/(如果|假如|若|除非|只要|一旦|万一|否则|先[^。；\n]{0,20}再|有问题再|不行再)/.test(text)) {
+    lines.push('- 条件与顺序原样保留：先 A 后 B、条件成立才执行，不得合并或调换顺序。')
+  }
+  if (/[0-9一二三四五六七八九十百千万]+(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/.test(text)) {
+    lines.push('- 数量与截止原样保留，不得模糊化（3 个不能写成几个）或放大。')
+  }
+  return lines
+}
+
 /** 根据草稿返回"任务解析提示"；无匹配时返回空。 */
 function buildTaskHint(text) {
   const value = String(text || '').trim()
@@ -316,7 +381,8 @@ function buildTaskHint(text) {
     .filter((pack) => !(pack.id === 'qa' && securityMatched && /(渗透|攻击面|漏洞)/.test(value) && !/(用例|回归)/.test(value)))
     .map((pack) => pack.line)
   const complexityLines = buildComplexityHints(value)
-  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length) return ''
+  const fidelityLines = buildFidelityHint(value)
+  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length) return ''
   const lines = ['【任务解析提示】']
   if (goal) {
     lines.push(
@@ -339,6 +405,7 @@ function buildTaskHint(text) {
   }
   for (const line of domainLines) lines.push('- 领域约束：' + line)
   for (const line of complexityLines) lines.push('- 复杂场景：' + line)
+  for (const line of fidelityLines) lines.push(line)
   lines.push('- 维度/标准/契约/领域约束是执行方法，不是新增事实或具体改法；原意、对象、约束不变。')
   return lines.join('\n')
 }
@@ -1147,6 +1214,47 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
       }
     }
 
+    // 情态/句式保真：尽量≠必须、必须≠请、可以…吗≠命令；不通过就重试一次
+    const fidelityIssue = modalityIssue(text, cleaned)
+    if (fidelityIssue) {
+      diag(cfg.diag, { kind: 'enhance-fidelity-guard', issue: fidelityIssue })
+      try {
+        const guardHint =
+          fidelityIssue === 'strong-to-weak'
+            ? '本次输出必须原样包含「必须/务必/一定/不得/禁止」中的原词，不得用「请」代替。'
+            : fidelityIssue === 'weak-to-strong'
+              ? '本次输出不得出现「必须/务必/一定/禁止」，必须保留「尽量/最好/建议/可以」原词。'
+              : '本次输出必须以「请确认能否」或「请回答是否」开头，不得写成命令。'
+        const guarded = await streamOnce({
+          llm,
+          route,
+          cfg,
+          text: promptText,
+          effort: plan.effort,
+          maxTokens: plan.maxTokens,
+          signal,
+          systemOverride: cfg.systemPrompt + '\n\n' + FIDELITY_GUARD_PROMPT + '\n' + guardHint,
+        })
+        attempts.push({
+          label: 'fidelity-guard',
+          effort: guarded.effort,
+          maxTokens: plan.maxTokens,
+          finish: guarded.finishReason ? guarded.finishReason.kind : 'none',
+          rawChars: guarded.output.length,
+          ms: guarded.ms,
+        })
+        if (!guarded.finishReason || (guarded.finishReason.kind !== 'error' && guarded.finishReason.kind !== 'aborted')) {
+          const guardedCleaned = cleanOutput(guarded.output)
+          if (guardedCleaned && !looksLikeAnswer(text, guardedCleaned) && !modalityIssue(text, guardedCleaned)) {
+            return buildResult(guardedCleaned, guarded, 'ok', 'ok')
+          }
+        }
+      } catch {
+        /* 保真重试失败：返回第一版 */
+      }
+      return buildResult(cleaned, result, 'ok', 'ok')
+    }
+
     // 再次增强要有"表达层面"的变化：与上一版相同/只换词就调高温度、要求改句式再试
     if (isCorrection && (isSameText(text, cleaned) || isShallowVariant(text, cleaned))) {
       const shallow = !isSameText(text, cleaned)
@@ -1543,6 +1651,7 @@ export {
   isSameText,
   isShallowVariant,
   bigramSimilarity,
+  modalityIssue,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
