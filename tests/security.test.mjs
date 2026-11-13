@@ -291,10 +291,14 @@ test('task hint covers goal + audience together', () => {
   assert.equal(hint.includes('模糊目标'), true)
   assert.equal(hint.includes('受众'), true)
 })
-test('task hint skips mechanical transforms', () => {
+test('task hint skips pure mechanical rewrites', () => {
   assert.equal(buildTaskHint('把这段说明压缩到 100 字以内'), '')
-  assert.equal(buildTaskHint('把这段话翻译成英文'), '')
   assert.equal(buildTaskHint('把按钮改成蓝色'), '')
+})
+test('task hint adds multilingual guidance for translation', () => {
+  const hint = buildTaskHint('把这段话翻译成英文')
+  assert.equal(hint.includes('多语言'), true)
+  assert.equal(hint.includes('不翻译'), true)
 })
 test('task hint detects task type contract', () => {
   const hint = buildTaskHint('帮我排查一下接口 500 错误')
@@ -310,6 +314,46 @@ test('task hint covers task type + audience', () => {
   const hint = buildTaskHint('写一份周报，给老板看')
   assert.equal(hint.includes('任务画像'), true)
   assert.equal(hint.includes('受众'), true)
+})
+
+/* ---------- 12. 领域约束包 / 复杂场景 ---------- */
+test('domain pack: security', () => {
+  const hint = buildTaskHint('帮我做个安全渗透测试')
+  assert.equal(hint.includes('安全领域'), true)
+  assert.equal(hint.includes('授权范围'), true)
+})
+test('domain pack: legal', () => {
+  const hint = buildTaskHint('帮我看下这份合同条款')
+  assert.equal(hint.includes('法务/合规'), true)
+  assert.equal(hint.includes('不构成法律意见'), true)
+})
+test('domain pack: finance', () => {
+  const hint = buildTaskHint('帮我做预算报表')
+  assert.equal(hint.includes('财务领域'), true)
+  assert.equal(hint.includes('不构成投资建议'), true)
+})
+test('domain pack: medical', () => {
+  const hint = buildTaskHint('帮我分析下这个症状')
+  assert.equal(hint.includes('医疗领域'), true)
+  assert.equal(hint.includes('医生'), true)
+})
+test('domain pack: production change', () => {
+  const hint = buildTaskHint('帮我做上线发布计划')
+  assert.equal(hint.includes('生产变更'), true)
+  assert.equal(hint.includes('回滚'), true)
+})
+test('domain pack: meeting', () => {
+  const hint = buildTaskHint('整理一下会议纪要')
+  assert.equal(hint.includes('决策'), true)
+  assert.equal(hint.includes('行动项'), true)
+})
+test('domain pack: testing', () => {
+  const hint = buildTaskHint('帮我写测试用例')
+  assert.equal(hint.includes('预期结果'), true)
+})
+test('complexity: multi-file / long / citation hints', () => {
+  assert.equal(buildTaskHint('批量处理目录下所有文件').includes('多文件/批量'), true)
+  assert.equal(buildTaskHint('按参考链接整理成文档').includes('引用/附件'), true)
 })
 
 console.log(`\n${passed} passed, ${failed} failed`)
