@@ -296,6 +296,21 @@ test('task hint skips mechanical transforms', () => {
   assert.equal(buildTaskHint('把这段话翻译成英文'), '')
   assert.equal(buildTaskHint('把按钮改成蓝色'), '')
 })
+test('task hint detects task type contract', () => {
+  const hint = buildTaskHint('帮我排查一下接口 500 错误')
+  assert.equal(hint.includes('任务画像'), true)
+  assert.equal(hint.includes('执行端所需的最低信息'), true)
+})
+test('task hint flags high-risk operations', () => {
+  const hint = buildTaskHint('删除测试环境的所有旧数据')
+  assert.equal(hint.includes('高风险'), true)
+  assert.equal(hint.includes('备份'), true)
+})
+test('task hint covers task type + audience', () => {
+  const hint = buildTaskHint('写一份周报，给老板看')
+  assert.equal(hint.includes('任务画像'), true)
+  assert.equal(hint.includes('受众'), true)
+})
 
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exitCode = 1
