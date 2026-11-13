@@ -17,22 +17,34 @@ DSH（DeepSeek Harness）profile 级插件：在每个会话的聊天输入框�
 
 ## 安装
 
-要求：DSH 桌面或 Web profile，模型服务已配置（增强默认跟随 `agentDefaultModel`）。
-已在 DSH `0.2.1-rc.5` 验证。
+前提：已安装 DSH（桌面或 Web profile），并在 **Settings → Models** 配好模型。
+插件本身零依赖、无安装脚本。已验证环境：DSH `0.2.1-rc.5`；其他版本未逐一验证。
 
-1. 克隆仓库：
+### 方式 A：下载 ZIP（最简单，不用 Git）
 
-   ```bash
-   git clone https://github.com/FXZeng-97/dsh-prompt-booster.git
-   ```
+1. 打开 https://github.com/FXZeng-97/dsh-prompt-booster
+2. 点 **Code → Download ZIP**，解压到任意目录（路径尽量不含中文/空格）。
+3. 在 DSH 里让 Agent 安装（把路径换成你的解压目录）：
 
-2. 让 DSH Agent 用插件管理器安装（把下面路径换成你本机克隆目录的绝对路径）：
+   > 把 `D:\dsh-prompt-booster` 目录用 plugin_manager 的 `install_bundle` 装进当前 profile
 
-   > 把 `/绝对路径/dsh-prompt-booster` 目录用 plugin_manager 的 `install_bundle` 装进当前 profile
+4. 刷新页面（或重启 DSH），输入框工具栏出现「✨ 增强」。
 
-3. 刷新页面，输入框工具栏出现「✨ 增强」。
+### 方式 B：git clone（开发者）
 
-卸载：`plugin_manager remove_bundle`，目标 `dsh-prompt-booster`。
+```bash
+git clone https://github.com/FXZeng-97/dsh-prompt-booster.git
+```
+
+然后同样让 Agent 安装该目录。
+
+### 卸载
+
+`plugin_manager remove_bundle`，目标 `dsh-prompt-booster`。
+
+> 说明：代码和增强规则一样，但不同人的**模型**（各自 `agentDefaultModel`）、**DSH 版本**、
+> **项目上下文**和**会话历史**不同，输出不会逐字相同；安装流程在本机验证过，
+> 其他人的系统/DSH 版本未逐一实测，遇到问题请开 Issue。
 
 ## 使用
 
