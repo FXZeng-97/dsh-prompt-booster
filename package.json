@@ -1,8 +1,8 @@
-{
+﻿{
   "name": "dsh-prompt-booster",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "type": "module",
-  "description": "提示词增强：在 DSH 输入框工具栏增加「增强」按钮，把草稿改写成更清楚、可执行的提示词，支持退改与撤销。",
+  "description": "鎻愮ず璇嶅寮猴細鍦?DSH 杈撳叆妗嗗伐鍏锋爮澧炲姞銆屽寮恒€嶆寜閽紝鎶婅崏绋挎敼鍐欐垚鏇存竻妤氥€佸彲鎵ц鐨勬彁绀鸿瘝锛屾敮鎸侀€€鏀逛笌鎾ら攢銆?,
   "license": "MIT",
   "author": "FXZeng",
   "repository": {

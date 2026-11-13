@@ -384,6 +384,15 @@ test('rewrite-style hint avoids asking the user', () => {
   assert.equal(hint.includes('改写/换风格'), true)
   assert.equal(hint.includes('不要要求用户补充'), true)
 })
+test('action-owner hint preserves who does what', () => {
+  const hint = buildTaskHint('正好harness有新版本了，我更新一下你再验证一次')
+  assert.equal(hint.includes('动作归属/视角'), true)
+  assert.equal(hint.includes('禁止角色互换'), true)
+})
+test('action-owner hint works for reversed roles', () => {
+  const hint = buildTaskHint('你先更新 harness，我再验证')
+  assert.equal(hint.includes('动作归属'), true)
+})
 
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exitCode = 1
