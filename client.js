@@ -335,7 +335,7 @@ window.__ModuleLoader__.load({
           buttons: element ? element.querySelectorAll('button').length : 0,
           sessions: true,
           hardened: true,
-          security: 'v3.4',
+          security: 'v3.5',
           tokenPresent: !!pageToken(),
           chatTurns: recentMessagesFrom(chatSnapshotRef.current).turns,
         })
