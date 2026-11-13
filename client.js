@@ -1,5 +1,5 @@
 /**
- * @local/prompt-booster —— 浏览器半边（Client 插件）。
+ * dsh-prompt-booster —— 浏览器半边（Client 插件）。
  *
  * 在聊天输入框工具栏右侧（slot conversation.input.right，发送按钮之前）注册一个
  * 「增强」按钮：
@@ -12,7 +12,7 @@
  * React 从浏览器模块表 require 获得；样式只用 --dsw-alias-* 主题 token。
  */
 window.__ModuleLoader__.load({
-  id: '@local/prompt-booster',
+  id: 'dsh-prompt-booster',
   factory(require) {
     const React = require('react')
     const h = React.createElement

@@ -1,10 +1,22 @@
 {
-  "name": "@local/prompt-booster",
-  "version": "0.2.0",
+  "name": "dsh-prompt-booster",
+  "version": "0.2.1",
   "type": "module",
-  "description": "提示词增强：在 Web GUI 输入框工具栏增加「增强」按钮，用模型把草稿改写成更清楚、可执行的提示词，并支持一键撤销。",
+  "description": "提示词增强：在 DSH 输入框工具栏增加「增强」按钮，把草稿改写成更清楚、可执行的提示词，支持退改与撤销。",
   "license": "MIT",
-  "author": "Prompt Booster contributors",
+  "author": "FXZeng",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FXZeng-97/dsh-prompt-booster.git"
+  },
+  "homepage": "https://github.com/FXZeng-97/dsh-prompt-booster#readme",
+  "bugs": {
+    "url": "https://github.com/FXZeng-97/dsh-prompt-booster/issues"
+  },
+  "engines": {
+    "dsh": "^0.2.1-rc.5",
+    "node": ">=22.19.0"
+  },
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -31,6 +43,7 @@
     "SECURITY.md",
     "COMPLIANCE.md",
     "LICENSE",
+    "docs/*.md",
     "tests/security.test.mjs"
   ],
   "dsh": {

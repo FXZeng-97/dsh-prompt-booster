@@ -1,4 +1,4 @@
-# @local/prompt-booster —— 本 bundle 的 patch 层。
+# dsh-prompt-booster —— 本 bundle 的 patch 层。
 #
 # 只插入一行 Host 插件；渲染在浏览器侧（client.js）完成。
 # Host 插件负责两件事：
@@ -24,7 +24,7 @@
 # 安全相关（Host/端口校验、http 来源页面 token、限流）由插件自动处理，无需配置。
 - insert:
     - id: prompt-booster
-      name: '@local/prompt-booster'
+      name: 'dsh-prompt-booster'
       # config:
       #   provider: your-provider
       #   model: your-model

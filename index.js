@@ -1,5 +1,5 @@
 /**
- * @local/prompt-booster —— Host 半边。
+ * dsh-prompt-booster —— Host 半边。
  *
  * 仅做两件事：
  *  1. 在 DSH Web server 上注册 /prompt-booster 路由（/health、/enhance、/diag）；
@@ -1305,7 +1305,7 @@ function makeHandler(ctx, cfg) {
         diag(cfg.diag, { kind: 'health', hasLlm: !!llm, route: route ? route.provider + '/' + route.model : null, efforts })
         return send(res, 200, {
           ok: true,
-          plugin: '@local/prompt-booster',
+          plugin: 'dsh-prompt-booster',
           hasLlm: !!llm,
           route: route ? { provider: route.provider, model: route.model, source: route.source } : null,
           efforts,

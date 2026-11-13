@@ -32,7 +32,7 @@ DSH（DeepSeek Harness）profile 级插件：在每个会话的聊天输入框�
 
 3. 刷新页面，输入框工具栏出现「✨ 增强」。
 
-卸载：`plugin_manager remove_bundle`，目标 `@local/prompt-booster`。
+卸载：`plugin_manager remove_bundle`，目标 `dsh-prompt-booster`。
 
 ## 使用
 

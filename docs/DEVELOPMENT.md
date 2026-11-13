@@ -18,7 +18,7 @@ node tests/security.test.mjs
 
 ## 发布到 npm（可选）
 
-`@local/prompt-booster` 里的 `@local` 是本机安装用的作用域名。要发布到 npm，先改成唯一包名
+`dsh-prompt-booster` 是本机/公开安装用的包名。要发布到 npm 或换名，先改成唯一包名
 （如 `dsh-prompt-booster` 或 `@你的账号/dsh-prompt-booster`），并**同步改三处**：
 
 1. `package.json` 的 `"name"`；
