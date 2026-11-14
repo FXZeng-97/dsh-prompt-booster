@@ -455,5 +455,25 @@ test('safety hint skips read-only analysis and mechanical transforms', () => {
   assert.equal(buildTaskHint('把这段文字翻译成英文').includes('变更类任务'), false)
 })
 
+/* ---------- 15. 持续性任务：定目标跑完 ---------- */
+test('persistent hint for explicit finish-it instruction', () => {
+  const hint = buildTaskHint('把这个项目的所有页面都检查一遍并修完，别停，全部做完再告诉我')
+  assert.equal(hint.includes('持续性任务'), true)
+  assert.equal(hint.includes('设定目标并持续执行到完成'), true)
+})
+test('persistent hint for criticism of stopping', () => {
+  const hint = buildTaskHint('你上次怎么又停了？继续把剩下的任务做完，别中途停')
+  assert.equal(hint.includes('持续性任务'), true)
+})
+test('persistent hint for no-questions-asked instruction', () => {
+  const hint = buildTaskHint('不用问我，自己跑完')
+  assert.equal(hint.includes('持续性任务'), true)
+  assert.equal(hint.includes('续跑指令'), true)
+})
+test('persistent hint skips one-shot tasks', () => {
+  assert.equal(buildTaskHint('帮我把这段文案改一下').includes('持续性任务'), false)
+  assert.equal(buildTaskHint('把这段说明压缩到 100 字以内').includes('持续性任务'), false)
+})
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) process.exitCode = 1

@@ -127,6 +127,14 @@ const SYSTEM_PROMPT = [
   "S4. 完成后：列改动文件/位置、验证结果、残余风险；不要只说完成。",
   "S5. 这些是执行方法，不改原任务目标；输出语言保持精简，通常 1 句安全要求即可。",
   "",
+  "【持续性任务：定目标、自己跑完】",
+  "T1. 草稿明确要求「你自己做完/别停/全部做完/不用问我/继续到底/一次做完」，或批评中途停止（怎么停了/又停/继续啊）时，任务里加一句：",
+  "    「请设定目标并持续执行到完成，不要中途停下等待确认；遇到阻塞先记录，继续可推进部分；完成后汇总结果、未完成项和风险。」",
+  "T1a. 若草稿只是「继续/别停/自己跑完/怎么停了」这类续跑指令，先结合最近对话把正在做的任务与剩余项补进提示词，再接 T1 的持续执行要求；不要只输出一句空泛的持续执行要求。",
+  "T2. 多步骤/长流程任务（批量、迁移、重构整个项目、长文档）即使没明说，也可加一句「分步执行并跟踪进度，全部完成后再汇总」。",
+  "T3. 一次性小任务不加这些要求，避免拖长。",
+  "T4. 这是执行方式，不改变原任务目标。",
+  "",
   "【领域约束与复杂场景】",
   "D1. 消息带【领域约束提示】时，按该领域补必要约束（授权范围、依据与复核、数据口径、备份/回滚、脱敏、术语表等）；只约束做法，不改目标、不加业务事实。",
   "D2. 长文档：先结构/提纲再逐节展开，章节清晰、术语一致，控制单次输出长度；多文件/批量：逐项处理、说明输出位置与命名、失败项单独汇总；多语言：明确目标语言、保留术语表、代码/命令/路径不翻译；引用/附件：保留原链接、路径、文件名与格式，不编造。",
@@ -395,6 +403,24 @@ function buildSafetyHint(value) {
   return lines
 }
 
+/** 持续性任务提示：用户明确要求做完/别停，或批评中途停止。 */
+const PERSIST_RE =
+  /(你自己做|自己做完|自己跑|自己搞|全部做完|都做完|做完再|别停|不要停|别中断|不要中断|不用问|别问|继续到底|一直做|一次做完|跑完再|直到完成|自主完成|自己推进|全程)/
+const CRITICIZE_STOP_RE = /(怎么停|又停|怎么又|停了|中断|继续啊|别老停|老是停|又断)/
+function buildPersistentHint(value) {
+  const text = String(value || '')
+  if (!PERSIST_RE.test(text) && !CRITICIZE_STOP_RE.test(text)) return []
+  const lines = []
+  if ([...text.trim()].length <= 25) {
+    lines.push('- 续跑指令：结合最近对话把正在做的任务与剩余项补进提示词，再接持续执行要求；不要只写一句空泛的「持续执行」。')
+  }
+  lines.push(
+    '- 持续性任务：任务里写明「设定目标并持续执行到完成，不要中途停下等待确认；' +
+      '遇到阻塞先记录，继续可推进部分；完成后汇总结果、未完成项和风险」。',
+  )
+  return lines
+}
+
 /** 根据草稿返回"任务解析提示"；无匹配时返回空。 */
 function buildTaskHint(text) {
   const value = String(text || '').trim()
@@ -414,7 +440,8 @@ function buildTaskHint(text) {
   const complexityLines = buildComplexityHints(value)
   const fidelityLines = buildFidelityHint(value)
   const safetyLines = buildSafetyHint(value)
-  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length) return ''
+  const persistentLines = buildPersistentHint(value)
+  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length) return ''
   const lines = ['【任务解析提示】']
   if (goal) {
     lines.push(
@@ -439,6 +466,7 @@ function buildTaskHint(text) {
   for (const line of complexityLines) lines.push('- 复杂场景：' + line)
   for (const line of fidelityLines) lines.push(line)
   for (const line of safetyLines) lines.push(line)
+  for (const line of persistentLines) lines.push(line)
   lines.push('- 维度/标准/契约/领域约束是执行方法，不是新增事实或具体改法；原意、对象、约束不变。')
   return lines.join('\n')
 }
