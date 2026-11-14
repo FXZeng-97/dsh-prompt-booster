@@ -459,7 +459,7 @@ test('safety hint skips read-only analysis and mechanical transforms', () => {
 test('persistent hint for explicit finish-it instruction', () => {
   const hint = buildTaskHint('把这个项目的所有页面都检查一遍并修完，别停，全部做完再告诉我')
   assert.equal(hint.includes('持续性任务'), true)
-  assert.equal(hint.includes('设定目标并持续执行到完成'), true)
+  assert.equal(hint.includes('继续做完剩余任务'), true)
 })
 test('persistent hint for criticism of stopping', () => {
   const hint = buildTaskHint('你上次怎么又停了？继续把剩下的任务做完，别中途停')
