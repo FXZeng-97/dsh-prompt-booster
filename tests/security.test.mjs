@@ -11,7 +11,7 @@
  * - 输出长度上限计算
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -539,6 +539,27 @@ test('incomplete output detection catches dangling verb', () => {
   assert.equal(looksIncomplete('每个方案都要有。'), true)
   assert.equal(looksIncomplete('请给出完整方案：'), true)
   assert.equal(looksIncomplete('请给出完整方案，包含目标、做法和风险。'), false)
+})
+test('bug fix gets code change safety and acceptance', () => {
+  const hint = buildTaskHint('帮我修一下这个 bug')
+  assert.equal(hint.includes('变更类任务'), true)
+  assert.equal(hint.includes('代码验收'), true)
+})
+test('ugly page counts as a vague visual goal', () => {
+  assert.equal(buildTaskHint('页面太丑了').includes('模糊目标'), true)
+})
+test('plain translation is mechanical, not a task profile', () => {
+  const hint = buildTaskHint('翻译这段文字')
+  assert.equal(hint.includes('任务画像'), false)
+  assert.equal(hint.includes('多语言'), true)
+})
+test('project refactor gets code acceptance', () => {
+  assert.equal(buildTaskHint('重构整个项目').includes('代码验收'), true)
+})
+test('client uses the conversation slot contract, not a guessed useChat prop', () => {
+  const client = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  assert.equal(client.includes('props.useChat'), false)
+  assert.equal(client.includes('props.useConversation'), true)
 })
 test('batch hint only adds resume when draft asks for it', () => {
   assert.equal(buildTaskHint('批量删除项目里所有 console.log').includes('断点续跑'), false)
