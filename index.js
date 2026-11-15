@@ -134,7 +134,8 @@ const SYSTEM_PROMPT = [
   "【持续性任务：定目标、自己跑完】",
   "T1. 草稿明确要求「你自己做完/别停/全部做完/不用问我/继续到底/一次做完」，或批评中途停止（怎么停了/又停/继续啊）时，任务里只加一句可执行要求（不要复述用户的抱怨/批评，不要重复同一要求）：",
   "    「请设定目标并明确可核验的完成标准（落到外部判据：页面清单逐项通过、测试/构建通过），继续做完剩余任务，中途不要停；完成后先报目标是否完成，再列未完成项和风险。」",
-  "T1a. 若目标或验收不清晰，用项目实际页面清单/测试/构建作为外部判据；无法确定的部分列出缺失项后继续可推进部分，不要让执行端自定标准再自判完成。",
+  "T1a. 若草稿只是「继续/别停/自己跑完/怎么停了」这类续跑指令，先结合最近对话把正在做的任务与剩余项补进提示词，并入同一句；不要先写「你上次停了」这类话，也不要只输出空泛的持续执行要求。",
+  "T1b. 若目标或验收不清晰，用项目实际页面清单/测试/构建作为外部判据；无法确定的部分列出缺失项后继续可推进部分，不要让执行端自定标准再自判完成。",
   "T2. 多步骤/长流程任务（批量、迁移、重构整个项目、长文档）即使没明说，也可加一句「分步执行并跟踪进度，全部完成后再汇总」。",
   "T3. 一次性小任务不加这些要求，避免拖长。",
   "T4. 这是执行方式，不改变原任务目标。",
@@ -187,6 +188,23 @@ const ANSWER_GUARD_PROMPT = [
   '请对照原句修正：只把答案/步骤内容改回请求，保留原句里的对象、事实和上一版正确的措辞与结构。',
   '不要整段重写，不要退化成空泛模板。',
 ].join('\n')
+
+/** 输出被截断/句子没写完时的修正提示。 */
+const INCOMPLETE_GUARD_PROMPT = [
+  '【本次特别注意】',
+  '上一版输出句子不完整，缺少宾语或后续要求（例如“每个方案都要有。”后面没有内容）。',
+  '请补全缺失内容，保留原意、对象和已有约束；直接输出完整提示词，不要解释。',
+].join('\n')
+
+/** 判断输出是否明显被截断/句子不完整。 */
+function looksIncomplete(text) {
+  const value = String(text || '').trim()
+  if (!value) return true
+  if (/[、，：；,;:(（“"「【]$/.test(value)) return true
+  if (/(?:都要有|需要有|要包含|需要包含|应包括|需要包括|要给出|需要给出|要说明|需要说明|包括)[。；！？]?$/.test(value)) return true
+  if (/(?:例如|比如|如下|分别是)[：:]?[。；]?$/.test(value)) return true
+  return false
+}
 
 /** 再次增强与上一版太接近时的两种更强改写提示（先结构、再表达）。 */
 const VARIATION_PROMPTS = [
@@ -336,7 +354,7 @@ function buildComplexityHints(value) {
 
 /** 情态/句式保真：尽量≠必须，必须≠请，可以…吗≠命令。 */
 const WEAK_MODAL_RE = /(尽量|最好|建议|可以|不妨|可选)/
-const STRONG_MODAL_RE = /(必须|务必|一定|不得|禁止|不能|不要|别)/
+const STRONG_MODAL_RE = /(必须|务必|一定|不得|禁止|不能|不要|(?:^|[，。；\s])别(?:$|[，。；\s])|别(?=[动改删覆盖碰用做]))/
 const QUESTION_MODAL_RE = /(可以[^。；\n]{0,20}吗|能不能|能否|是否|方便吗)/
 function modalityIssue(draft, output) {
   const d = String(draft || '')
@@ -347,6 +365,8 @@ function modalityIssue(draft, output) {
   if (!dWeak && !dStrong && !dQuestion) return ''
   const oWeak = WEAK_MODAL_RE.test(o)
   const oStrong = STRONG_MODAL_RE.test(o)
+  if (dQuestion && /(确认|回答|是否|能否)/.test(o)) return ''
+  if (dWeak && !dStrong && !oWeak && !oStrong) return 'weak-to-none'
   if (dWeak && !dStrong && oStrong && !oWeak) return 'weak-to-strong'
   if (dStrong && !oStrong) return 'strong-to-weak'
   if (dQuestion && !/(确认|回答|是否|能否)/.test(o)) return 'question-to-directive'
@@ -366,7 +386,7 @@ function buildFidelityHint(value) {
   const text = String(value || '')
   const lines = []
   const risky = [
-    /[0-9一二三四五六七八九十百千万]+(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/,
+    /(?:[0-9]+|[二三四五六七八九十百千万]+)(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/,
     /(今天|明天|昨天|本周|下周|周[一二三四五六日]|月底|月初|之前|以前|之后|以后|截止|deadline|周五)/,
     /(如果|假如|若|除非|只要|一旦|万一|否则|先[^。；\n]{0,20}再|有问题再|不行再)/,
     /(必须|务必|一定|应该|可以|尽量|最好|建议|允许|不能|不得|不要|别)/,
@@ -388,7 +408,7 @@ function buildFidelityHint(value) {
   if (/(如果|假如|若|除非|只要|一旦|万一|否则|先[^。；\n]{0,20}再|有问题再|不行再)/.test(text)) {
     lines.push('- 条件与顺序原样保留：先 A 后 B、条件成立才执行，不得合并或调换顺序。')
   }
-  if (/[0-9一二三四五六七八九十百千万]+(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/.test(text)) {
+  if (/(?:[0-9]+|[二三四五六七八九十百千万]+)(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/.test(text)) {
     lines.push('- 数量与截止原样保留，不得模糊化（3 个不能写成几个）或放大。')
   }
   return lines
@@ -397,7 +417,7 @@ function buildFidelityHint(value) {
 /** 变更类/对外发送类任务的安全执行提示。 */
 const MUTATION_VERB_RE = /(改|修改|重构|修复|更新|升级|删除|删掉|覆盖|重命名|移动|迁移|替换|批量|部署|上线|发布|回滚|回退|加功能|去掉|清理|调整)/
 const MUTATION_OBJECT_RE =
-  /(代码|函数|模块|文件|目录|项目|仓库|数据库|表|配置|文档|表格|excel|ppt|设计稿|图片|图|视频|脚本|接口|依赖|版本|数据)/
+  /(代码|函数|模块|文件|目录|项目|仓库|数据库|数据表|表结构|配置|文档|表格|excel|ppt|设计稿|图片|图|视频|脚本|接口|依赖|版本|数据)/
 const OUTBOUND_RE = /(发邮件|发送|回复客户|通知客户|对外发布|群发|公告)/
 function buildSafetyHint(value) {
   const text = String(value || '')
@@ -434,9 +454,10 @@ function buildSafetyHint(value) {
 const PERSIST_RE =
   /(你自己做|自己做完|自己跑|自己搞|全部做完|都做完|做完再|别停|不要停|别中断|不要中断|不用问|别问|继续到底|一直做|一次做完|跑完再|直到完成|自主完成|自己推进|全程)/
 const CRITICIZE_STOP_RE = /(怎么停|又停|怎么又|停了|中断|继续啊|别老停|老是停|又断)/
+const CONTINUATION_RE = /^(?:请)?(?:继续|接着)(?:做|写|跑|干|完成)?[。！!]?$/
 function buildPersistentHint(value) {
   const text = String(value || '')
-  if (!PERSIST_RE.test(text) && !CRITICIZE_STOP_RE.test(text)) return []
+  if (!PERSIST_RE.test(text) && !CRITICIZE_STOP_RE.test(text) && !CONTINUATION_RE.test(text.trim())) return []
   const lines = []
   if ([...text.trim()].length <= 25) {
     lines.push('- 续跑指令：结合最近对话补出任务与剩余项，并入同一句；不要复述批评、不要重复「继续…」和「设定目标…」两遍。')
@@ -473,11 +494,13 @@ function buildTaskHint(text) {
     ? ['- 轻量改写：只改指定点，保留原意与结构；不扩写、不追问。']
     : []
   const diagnosisLines =
-    /(为什么|原因|慢|瓶颈|排查|诊断|定位)/.test(value) && !/(不要建议|只要原因|别给建议)/.test(value)
+    /(为什么|原因|慢|瓶颈|排查|诊断)/.test(value) && !/(不要建议|只要原因|别给建议)/.test(value)
       ? ['- 诊断任务：先定位原因与依据，再给可执行的优化方案（按收益/成本排序）和验证方式（写清基线与测量方法）；用户明确不要建议时才省略。']
       : []
   const visualLines =
-    /(好看|美观|视觉|样式|颜色|界面)/.test(value) && !/(代码|函数|接口|数据库)/.test(value)
+    /(好看|美观|视觉|样式|颜色|界面)/.test(value) &&
+    /(改|调整|优化|美化|换|修|重做)/.test(value) &&
+    !/(写|设计|做|实现|生成|产出|新建|开发|性能|速度|响应|加载|卡顿|内存|CPU)/.test(value)
       ? ['- 视觉任务：直接改目标样式并给前后对比；不要只出方案或反复分析；保留原文件，只改必要范围。']
       : []
   if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length && !lightEditLines.length && !diagnosisLines.length && !visualLines.length) return ''
@@ -850,7 +873,11 @@ function safeProjectFile(projectDir, name, maxChars) {
     if (stats.size > 1024 * 1024) return ''
     const real = realpathSync(filePath)
     const base = projectDir.endsWith(sep) ? projectDir : projectDir + sep
-    if (!real.startsWith(base)) return ''
+    const same =
+      process.platform === 'win32'
+        ? real.toLowerCase().startsWith(base.toLowerCase())
+        : real.startsWith(base)
+    if (!same) return ''
     return readFileSync(real, 'utf8').slice(0, maxChars)
   } catch {
     return ''
@@ -1251,6 +1278,8 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
   // 多次增强 = 连续纠正：原句是最高权重，上一版作为待纠正候选；首次增强只看草稿。
   const basePromptText = buildEnhanceUserText({ text, base, contextText })
   const isCorrection = !!(base && String(base).trim() && String(base).trim() !== String(text).trim())
+  // 多次增强时，保真/答案检查以原句为准，而不是以可能已经偏掉的上一版为准。
+  const guardDraft = isCorrection ? String(base) : text
   const taskHint = buildTaskHint(isCorrection ? String(base || text) : text)
   const promptText = taskHint ? basePromptText + '\n\n' + taskHint : basePromptText
 
@@ -1299,7 +1328,7 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
     if (!cleaned) continue
 
     const buildResult = (value, res, guard, variation) => {
-      const lengthCap = outputLengthCap([...text].length)
+      const lengthCap = outputLengthCap([...guardDraft].length)
       return {
         text: value,
         mode: isCorrection ? 'correction' : 'fresh',
@@ -1318,7 +1347,41 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
     }
 
     // 情态/句式保真：尽量≠必须、必须≠请、可以…吗≠命令；不通过就重试一次
-    const fidelityIssue = modalityIssue(text, cleaned)
+    // 明显不完整：补全一次，再不行走下一套 plan
+    if (looksIncomplete(cleaned)) {
+      diag(cfg.diag, { kind: 'enhance-incomplete-guard', chars: [...cleaned].length })
+      try {
+        const fixed = await streamOnce({
+          llm,
+          route,
+          cfg,
+          text: promptText,
+          effort: plan.effort,
+          maxTokens: plan.maxTokens,
+          signal,
+          systemOverride: cfg.systemPrompt + '\n\n' + INCOMPLETE_GUARD_PROMPT,
+        })
+        attempts.push({
+          label: 'incomplete-guard',
+          effort: fixed.effort,
+          maxTokens: plan.maxTokens,
+          finish: fixed.finishReason ? fixed.finishReason.kind : 'none',
+          rawChars: fixed.output.length,
+          ms: fixed.ms,
+        })
+        if (!fixed.finishReason || (fixed.finishReason.kind !== 'error' && fixed.finishReason.kind !== 'aborted')) {
+          const fixedCleaned = cleanOutput(fixed.output)
+          if (fixedCleaned && !looksIncomplete(fixedCleaned) && !looksLikeAnswer(guardDraft, fixedCleaned)) {
+            return buildResult(fixedCleaned, fixed, 'ok', 'ok')
+          }
+        }
+      } catch {
+        /* 补全失败：走下一套 plan */
+      }
+      continue
+    }
+
+    const fidelityIssue = modalityIssue(guardDraft, cleaned)
     if (fidelityIssue) {
       diag(cfg.diag, { kind: 'enhance-fidelity-guard', issue: fidelityIssue })
       try {
@@ -1327,7 +1390,9 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
             ? '本次输出必须原样包含「必须/务必/一定/不得/禁止」中的原词，不得用「请」代替。'
             : fidelityIssue === 'weak-to-strong'
               ? '本次输出不得出现「必须/务必/一定/禁止」，必须保留「尽量/最好/建议/可以」原词。'
-              : '本次输出必须以「请确认能否」或「请回答是否」开头，不得写成命令。'
+              : fidelityIssue === 'weak-to-none'
+                ? '本次输出必须保留原句的「尽量/最好/建议/可以」原词，不得删掉或改成命令。'
+                : '本次输出必须以「请确认能否」或「请回答是否」开头，不得写成命令。'
         const guarded = await streamOnce({
           llm,
           route,
@@ -1348,14 +1413,14 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
         })
         if (!guarded.finishReason || (guarded.finishReason.kind !== 'error' && guarded.finishReason.kind !== 'aborted')) {
           const guardedCleaned = cleanOutput(guarded.output)
-          if (guardedCleaned && !looksLikeAnswer(text, guardedCleaned) && !modalityIssue(text, guardedCleaned)) {
+          if (guardedCleaned && !looksLikeAnswer(guardDraft, guardedCleaned) && !modalityIssue(guardDraft, guardedCleaned)) {
             return buildResult(guardedCleaned, guarded, 'ok', 'ok')
           }
         }
       } catch {
-        /* 保真重试失败：返回第一版 */
+        /* 保真重试失败：第一版不通过答案检查时继续走答案修正 */
       }
-      return buildResult(cleaned, result, 'ok', 'ok')
+      if (!looksLikeAnswer(text, cleaned)) return buildResult(cleaned, result, 'ok', 'ok')
     }
 
     // 再次增强要有"表达层面"的变化：与上一版相同/只换词就调高温度、要求改句式再试
@@ -1389,7 +1454,7 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
             continue
           }
           const variedCleaned = cleanOutput(varied.output)
-          if (!variedCleaned || looksLikeAnswer(text, variedCleaned)) continue
+          if (!variedCleaned || looksLikeAnswer(guardDraft, variedCleaned)) continue
           if (!isSameText(text, variedCleaned) && !isShallowVariant(text, variedCleaned)) {
             return buildResult(variedCleaned, varied, 'ok', 'varied')
           }
@@ -1402,7 +1467,7 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
       return buildResult(cleaned, result, 'ok', 'same')
     }
 
-    if (!looksLikeAnswer(text, cleaned)) return buildResult(cleaned, result, 'ok')
+    if (!looksLikeAnswer(guardDraft, cleaned)) return buildResult(cleaned, result, 'ok')
 
     // 上一版把任务答成答案时：只做"修正"重试（带上原句，保留正确部分），不退化成模板。
     diag(cfg.diag, { kind: 'enhance-answer-guard', mode: isCorrection ? 'correction' : 'fresh', charsOut: [...cleaned].length })
@@ -1432,14 +1497,19 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
       })
       if (!strict.finishReason || (strict.finishReason.kind !== 'error' && strict.finishReason.kind !== 'aborted')) {
         const strictCleaned = cleanOutput(strict.output)
-        if (strictCleaned && !looksLikeAnswer(text, strictCleaned)) {
+        if (strictCleaned && !looksLikeAnswer(guardDraft, strictCleaned)) {
           return buildResult(strictCleaned, strict, 'retried')
         }
       }
     } catch {
-      /* 修正重试失败：返回第一版，不阻塞用户 */
+      /* 修正重试失败：不把答案当提示词返回 */
     }
-    return buildResult(cleaned, result, 'failed')
+    const guardError = Object.assign(
+      new Error('模型输出仍像任务答案而不是提示词，请重试或补充任务描述'),
+      { status: 502, code: 'ANSWER_GUARD_FAILED' },
+    )
+    guardError.detail = { attempts }
+    throw guardError
   }
 
   const err = Object.assign(new Error('模型没有返回可用内容，请重试或换个说法'), { status: 502 })
@@ -1755,6 +1825,7 @@ export {
   isShallowVariant,
   bigramSimilarity,
   modalityIssue,
+  looksIncomplete,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,

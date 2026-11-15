@@ -147,6 +147,17 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /** 从 Conversation 快照里取 Chat target 快照（输入栏 slot 标准 props 只有 useConversation）。 */
+    function selectChatSnapshot(snapshot) {
+      try {
+        return snapshot && snapshot.views && typeof snapshot.views.get === 'function'
+          ? snapshot.views.get('chat')
+          : undefined
+      } catch (e) {
+        return undefined
+      }
+    }
+
     /** 从当前页面 Chat 视图取最近 2 轮 prompt/response 预览（不读会话历史）。 */
     function recentMessagesFrom(chatSnapshot) {
       try {
@@ -280,13 +291,9 @@ window.__ModuleLoader__.load({
       const inputActions = props.inputActions
       const project = typeof props.project === 'function' ? props.project() : null
       const sessionId = typeof props.sessionId === 'string' ? props.sessionId : ''
-      // 最近对话取自当前页面 Chat 视图（不请求 Host 读取会话历史）
-      const chatHook = typeof props.useChat === 'function' ? props.useChat : null
-      const chatSnapshot = chatHook
-        ? chatHook(function (snapshot) {
-            return snapshot
-          })
-        : null
+      // 最近对话取自当前页面 Conversation 快照里的 Chat target（输入栏 slot 没有 useChat prop）
+      const chatHook = typeof props.useConversation === 'function' ? props.useConversation : null
+      const chatSnapshot = chatHook ? chatHook(selectChatSnapshot) : null
 
       const [busy, setBusy] = React.useState(false)
       const [undo, setUndo] = React.useState(null)

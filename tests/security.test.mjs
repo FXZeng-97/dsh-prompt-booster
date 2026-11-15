@@ -27,6 +27,7 @@ import {
   isSameText,
   isShallowVariant,
   modalityIssue,
+  looksIncomplete,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
@@ -417,6 +418,9 @@ test('modality issue flags must-to-please downgrade', () => {
 test('modality issue flags weak-to-strong upgrade', () => {
   assert.notEqual(modalityIssue('尽量周五前给我', '必须在周五前给我。'), '')
 })
+test('modality issue flags weak modality removal', () => {
+  assert.notEqual(modalityIssue('尽量周五前给我', '请在周五前给我。'), '')
+})
 test('modality issue flags question-to-directive', () => {
   assert.notEqual(modalityIssue('可以周五前给我吗', '请你在周五前给我。'), '')
 })
@@ -507,6 +511,34 @@ test('persistent hint asks for verifiable completion standard', () => {
 test('visual task hint asks for before/after change, not only a plan', () => {
   const hint = buildTaskHint('帮我把这个页面改好看点')
   assert.equal(hint.includes('直接改目标样式并给前后对比'), true)
+})
+test('visual hint does not fire for interface creation', () => {
+  assert.equal(buildTaskHint('写一个登录界面').includes('视觉任务'), false)
+  assert.equal(buildTaskHint('实现一个可视化界面').includes('视觉任务'), false)
+})
+test('diagnosis hint does not fire for plain position lookup', () => {
+  assert.equal(buildTaskHint('定位按钮的位置').includes('诊断任务'), false)
+})
+test('continuation-only drafts trigger persistent hint', () => {
+  assert.equal(buildTaskHint('继续').includes('持续性任务'), true)
+  assert.equal(buildTaskHint('接着做').includes('持续性任务'), true)
+})
+test('single 一个 does not trigger quantity fidelity hint', () => {
+  assert.equal(buildTaskHint('写一个登录界面').includes('数量与截止'), false)
+})
+test('别 inside 特别 is not treated as a prohibition', () => {
+  assert.equal(modalityIssue('特别说明一下这个页面的问题', '请说明这个页面的问题。'), '')
+})
+test('表达 is not treated as a database table change', () => {
+  assert.equal(buildTaskHint('帮我改善一下表达').includes('变更类任务'), false)
+})
+test('performance optimization is not treated as a visual change', () => {
+  assert.equal(buildTaskHint('优化界面性能').includes('视觉任务'), false)
+})
+test('incomplete output detection catches dangling verb', () => {
+  assert.equal(looksIncomplete('每个方案都要有。'), true)
+  assert.equal(looksIncomplete('请给出完整方案：'), true)
+  assert.equal(looksIncomplete('请给出完整方案，包含目标、做法和风险。'), false)
 })
 test('batch hint only adds resume when draft asks for it', () => {
   assert.equal(buildTaskHint('批量删除项目里所有 console.log').includes('断点续跑'), false)
