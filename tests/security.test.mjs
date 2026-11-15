@@ -469,13 +469,40 @@ test('outbound hint fixes sender perspective and no invented facts', () => {
 test('database change hint asks for target structure', () => {
   const hint = buildTaskHint('更新数据库里的用户表结构')
   assert.equal(hint.includes('目标结构'), true)
-  assert.equal(hint.includes('未确认前只出变更方案'), true)
+  assert.equal(hint.includes('未确认前只出方案'), true)
   assert.equal(hint.includes('按假设继续'), false)
 })
-test('batch safety reconciles failure policy', () => {
+test('batch safety is goal-oriented, not a failure ledger', () => {
   const hint = buildTaskHint('批量把项目里所有 console.log 删掉')
-  assert.equal(hint.includes('整体异常'), true)
-  assert.equal(hint.includes('验证结果'), false)
+  assert.equal(hint.includes('验证目标是否全部完成'), true)
+  assert.equal(hint.includes('失败项汇总'), false)
+  assert.equal(hint.includes('下一步'), true)
+})
+test('diagnosis hint includes optimization suggestions', () => {
+  const hint = buildTaskHint('分析一下这段代码为什么慢')
+  assert.equal(hint.includes('优化方案'), true)
+  assert.equal(hint.includes('按收益/成本排序'), true)
+  assert.equal(hint.includes('基线'), true)
+  assert.equal(hint.includes('只诊断'), false)
+})
+test('code change hint includes verifiable acceptance', () => {
+  const hint = buildTaskHint('帮我把这个函数改成异步的')
+  assert.equal(hint.includes('代码验收'), true)
+  assert.equal(hint.includes('测试通过'), true)
+  assert.equal(hint.includes('完成了多少'), true)
+})
+test('database hint requires concrete target structure fields', () => {
+  assert.equal(buildTaskHint('更新数据库里的用户表结构').includes('字段/类型'), true)
+})
+test('batch hint records verification baseline', () => {
+  const hint = buildTaskHint('批量把项目里所有 console.log 删掉')
+  assert.equal(hint.includes('基线'), true)
+  assert.equal(hint.includes('只统计本次新增失败'), true)
+})
+test('persistent hint asks for verifiable completion standard', () => {
+  const hint = buildTaskHint('不用问我，自己跑完')
+  assert.equal(hint.includes('可核验'), true)
+  assert.equal(hint.includes('外部判据'), true)
 })
 test('visual task hint asks for before/after change, not only a plan', () => {
   const hint = buildTaskHint('帮我把这个页面改好看点')
@@ -485,11 +512,7 @@ test('batch hint only adds resume when draft asks for it', () => {
   assert.equal(buildTaskHint('批量删除项目里所有 console.log').includes('断点续跑'), false)
   assert.equal(buildTaskHint('批量删除项目里所有 console.log，支持断点续跑').includes('断点续跑'), true)
 })
-test('diagnosis hint avoids unrequested improvement deliverables', () => {
-  const hint = buildTaskHint('分析一下这段代码为什么慢')
-  assert.equal(hint.includes('只诊断'), true)
-  assert.equal(hint.includes('不要追加优化方案'), true)
-})
+
 test('safety hint skips read-only analysis and mechanical transforms', () => {
   assert.equal(buildTaskHint('分析一下这段代码为什么慢').includes('变更类任务'), false)
   assert.equal(buildTaskHint('把这段说明压缩到 100 字以内').includes('变更类任务'), false)
