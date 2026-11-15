@@ -429,11 +429,11 @@ test('modality issue accepts preserved modality', () => {
 /* ---------- 14. 变更类任务的安全执行 ---------- */
 test('safety hint flags code modification', () => {
   const hint = buildTaskHint('帮我把这个函数改成异步的')
-  assert.equal(hint.includes('变更类任务'), true)
-  assert.equal(hint.includes('先备份'), true)
+  assert.equal(hint.includes('小改动'), true)
+  assert.equal(hint.includes('回滚方式'), false)
 })
 test('safety hint flags document modification', () => {
-  assert.equal(buildTaskHint('把这个文档里的 2024 改成 2025').includes('变更类任务'), true)
+  assert.equal(buildTaskHint('把这个文档里的 2024 改成 2025').includes('小改动'), true)
 })
 test('safety hint flags batch deletion', () => {
   const hint = buildTaskHint('批量把项目里所有 console.log 删掉')
@@ -447,7 +447,48 @@ test('safety hint flags outbound communication', () => {
   assert.equal(hint.includes('对外发送类'), true)
 })
 test('safety hint flags design asset modification', () => {
-  assert.equal(buildTaskHint('改一下这张图的颜色').includes('变更类任务'), true)
+  assert.equal(buildTaskHint('改一下这张图的颜色').includes('小改动'), true)
+})
+test('light edit does not add audience or marketing requirements', () => {
+  const hint = buildTaskHint('帮我把这段文案改一下')
+  assert.equal(hint.includes('轻量改写'), true)
+  assert.equal(hint.includes('按营销要求'), false)
+  assert.equal(hint.includes('任务画像'), false)
+  assert.equal(hint.includes('核心卖点'), false)
+})
+test('content creation still gets task profile', () => {
+  const hint = buildTaskHint('写一段产品文案')
+  assert.equal(hint.includes('任务画像'), true)
+})
+test('outbound hint fixes sender perspective and no invented facts', () => {
+  const hint = buildTaskHint('给客户发邮件说项目要延期')
+  assert.equal(hint.includes('发送方是用户'), true)
+  assert.equal(hint.includes('不要以客户视角写'), true)
+  assert.equal(hint.includes('未给出的原因/日期/影响不编造'), true)
+})
+test('database change hint asks for target structure', () => {
+  const hint = buildTaskHint('更新数据库里的用户表结构')
+  assert.equal(hint.includes('目标结构'), true)
+  assert.equal(hint.includes('未确认前只出变更方案'), true)
+  assert.equal(hint.includes('按假设继续'), false)
+})
+test('batch safety reconciles failure policy', () => {
+  const hint = buildTaskHint('批量把项目里所有 console.log 删掉')
+  assert.equal(hint.includes('整体异常'), true)
+  assert.equal(hint.includes('验证结果'), false)
+})
+test('visual task hint asks for before/after change, not only a plan', () => {
+  const hint = buildTaskHint('帮我把这个页面改好看点')
+  assert.equal(hint.includes('直接改目标样式并给前后对比'), true)
+})
+test('batch hint only adds resume when draft asks for it', () => {
+  assert.equal(buildTaskHint('批量删除项目里所有 console.log').includes('断点续跑'), false)
+  assert.equal(buildTaskHint('批量删除项目里所有 console.log，支持断点续跑').includes('断点续跑'), true)
+})
+test('diagnosis hint avoids unrequested improvement deliverables', () => {
+  const hint = buildTaskHint('分析一下这段代码为什么慢')
+  assert.equal(hint.includes('只诊断'), true)
+  assert.equal(hint.includes('不要追加优化方案'), true)
 })
 test('safety hint skips read-only analysis and mechanical transforms', () => {
   assert.equal(buildTaskHint('分析一下这段代码为什么慢').includes('变更类任务'), false)
