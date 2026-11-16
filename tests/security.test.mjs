@@ -549,7 +549,13 @@ test('rhetorical question and action directive are preserved', () => {
   const hint = buildTaskHint('你搜退货申请会出来两个，这俩哪个对也不会判断吗')
   assert.equal(hint.includes('反问/质问'), true)
   assert.equal(hint.includes('动作指令'), true)
-  assert.equal(hint.includes('只判断'), true)
+  assert.equal(hint.includes('前文决策'), true)
+  assert.equal(hint.includes('只判断'), false)
+})
+test('explicit prior decision is preserved as selection', () => {
+  const hint = buildTaskHint('前面我已经说了选第一个，这俩哪个对不会判断吗')
+  assert.equal(hint.includes('前文决策'), true)
+  assert.equal(hint.includes('选中'), true)
 })
 test('explicit explanation request is not stripped', () => {
   assert.equal(buildTaskHint('判断哪个对，并说明依据').includes('只判断'), false)

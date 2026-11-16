@@ -81,9 +81,11 @@ const SYSTEM_PROMPT = [
   "4c. 即使草稿要求「列出步骤/给出方案/写清楚」，也只写这个要求本身，不得展开具体步骤、条目或方案内容。",
   "4d. 草稿本身已经是答案/步骤清单时：改写成「请整理/列出…」的任务描述，删除答案内容，不要保留清单。",
   "4e. 问句只改写成一句请求，不要把同一个要求写两遍（如「请列出…请给出…」）。",
-  "4f. 反问/质问不是问原因：「…不会判断吗」「这都不会吗」「连…都不行吗」表示要求你直接判断/执行；写成直接请求，不追加「说明依据/过程」，不拆成先说明再判断。",
+  "4f. 反问/质问不是问原因：「…不会判断吗」「这都不会吗」「连…都不行吗」表示要求你直接执行/判断；若最近对话已明确选哪个，按它选中，不要改写成「判断哪个对」，不追加「说明依据/过程」，不拆成先说明再判断。",
   "4g. 「你搜/你查/你看/你打开/你运行」是执行端动作指令：写成「请你搜索/查询/查看/打开/运行」；不得改写成「搜索会…」的事实陈述或前提，不得丢掉「去执行」的要求。",
   "4h. 只要求判断/选择（哪个对/选哪个）时，只写「请判断/请选择」；原文没要求就不要追加「说明依据/分别是什么/各自对应什么情况」。",
+  "4i. 草稿提到「我前面已经说了/刚才说过/按之前说的/我说过」时，必须保留这个引用，把前文已确认的选择写进任务；不要改写成「判断哪个对」，不要重新问用户。",
+  "4j. 从多个选项里选/点时，动作是「选中/点选/选择正确项」；原文没要求判断对错时，不要写成「请判断哪个对/说明依据」。",
   "5. 上下文只用来消解指代（「这个插件」「这段说明」「初版」指什么）和核对数据来源；不得用来新增受众、结构、篇幅、格式要求。最近对话按轮取最近 2 轮：以【最近一轮对话】为主（约 65% 参考权重），【更早一轮对话】只作辅助（约 35%）；两者冲突时以最近一轮为准。",
   "",
   "【目标解析：模糊目标 → 判定维度（通用规则）】",
@@ -508,17 +510,21 @@ function buildTaskHint(text) {
       : []
   const rhetoricalLines =
     /(不会|不能|不行).{0,8}吗[？?]?$/.test(value) || /这都不会|连[^。；\n]{0,10}都/.test(value)
-      ? ['- 反问/质问：这是要求执行端直接判断/执行，不是问为什么不会；不要追加依据或拆成先说明再判断。']
+      ? ['- 反问/质问：这是要求执行端直接执行/判断，不是问为什么不会；若最近对话已有明确选择，按它选中，不要改成判断哪个对或再问用户。']
       : []
   const directiveLines = /(你|您)[^。；\n]{0,4}(搜|查|看|打开|运行|执行|找|点)/.test(value)
     ? ['- 动作指令：保留「请你搜索/查看/打开…」的指令，不能改写成「搜索会…」的事实陈述。']
     : []
+  const priorDecisionLines =
+    /(前面|刚才|之前|上次|已经说|已经讲|我说过|这俩|两个)/.test(value) && /(选|哪个|那个|对|判断)/.test(value)
+      ? ['- 前文决策：若最近对话已说明选哪个或选择标准，把它写进任务并直接选中正确项；不要改写成“判断哪个对”，也不要再问用户。']
+      : []
   const judgmentLines =
     /(哪个|哪一个|选哪).{0,8}(对|正确|错)|判断/.test(value) &&
-    !/(依据|理由|说明|解释|过程|分别)/.test(value)
+    !/(依据|理由|说明|解释|过程|分别|这俩|两个|选|前面|刚才|之前|上次)/.test(value)
       ? ['- 只判断：只要求给出哪个正确/结论；不要追加「说明依据/分别是什么」等原文没有的要求。']
       : []
-  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length && !lightEditLines.length && !diagnosisLines.length && !visualLines.length && !rhetoricalLines.length && !directiveLines.length && !judgmentLines.length) return ''
+  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length && !lightEditLines.length && !diagnosisLines.length && !visualLines.length && !rhetoricalLines.length && !directiveLines.length && !priorDecisionLines.length && !judgmentLines.length) return ''
   const lines = ['【任务解析提示】']
   if (goal) {
     lines.push(
@@ -549,6 +555,7 @@ function buildTaskHint(text) {
   for (const line of visualLines) lines.push(line)
   for (const line of rhetoricalLines) lines.push(line)
   for (const line of directiveLines) lines.push(line)
+  for (const line of priorDecisionLines) lines.push(line)
   for (const line of judgmentLines) lines.push(line)
   lines.push('- 维度/标准/契约/领域约束是执行方法，不是新增事实或具体改法；原意、对象、约束不变。')
   return lines.join('\n')
