@@ -545,6 +545,15 @@ test('bug fix gets code change safety and acceptance', () => {
   assert.equal(hint.includes('变更类任务'), true)
   assert.equal(hint.includes('代码验收'), true)
 })
+test('rhetorical question and action directive are preserved', () => {
+  const hint = buildTaskHint('你搜退货申请会出来两个，这俩哪个对也不会判断吗')
+  assert.equal(hint.includes('反问/质问'), true)
+  assert.equal(hint.includes('动作指令'), true)
+  assert.equal(hint.includes('只判断'), true)
+})
+test('explicit explanation request is not stripped', () => {
+  assert.equal(buildTaskHint('判断哪个对，并说明依据').includes('只判断'), false)
+})
 test('ugly page counts as a vague visual goal', () => {
   assert.equal(buildTaskHint('页面太丑了').includes('模糊目标'), true)
 })
