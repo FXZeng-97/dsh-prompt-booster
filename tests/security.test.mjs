@@ -557,6 +557,11 @@ test('explicit prior decision is preserved as selection', () => {
   assert.equal(hint.includes('前文决策'), true)
   assert.equal(hint.includes('选中'), true)
 })
+test('missing context keeps prior-selection reference instead of inventing options', () => {
+  const hint = buildTaskHint('你搜退货申请会出来两个，这俩哪个对也不会判断吗')
+  assert.equal(hint.includes('按我前面已经说明的选择'), true)
+  assert.equal(hint.includes('不要编造选项'), true)
+})
 test('explicit explanation request is not stripped', () => {
   assert.equal(buildTaskHint('判断哪个对，并说明依据').includes('只判断'), false)
 })
