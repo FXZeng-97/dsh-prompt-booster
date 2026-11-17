@@ -158,24 +158,52 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** 从当前页面 Chat 视图取最近 2 轮 prompt/response 预览（不读会话历史）。 */
-    function recentMessagesFrom(chatSnapshot) {
+    const PRIOR_POINTER_RE = /(前面|刚才|之前|上次|已经说|已经讲|我说过|这俩|这两个)/
+    const SELECTION_RE = /(选|不要选|别选|用哪个|按.+|第[一二三四五]个)/
+
+    /** 从当前页面 Chat 视图取最近 prompt/response 预览；提到前文时多取几轮。 */
+    function recentMessagesFrom(chatSnapshot, draftText) {
       try {
         const items =
           chatSnapshot && chatSnapshot.navigation && typeof chatSnapshot.navigation.items === 'function'
             ? chatSnapshot.navigation.items()
             : []
+        const deep = PRIOR_POINTER_RE.test(String(draftText || ''))
+        const turns = deep ? 6 : 2
         const messages = []
-        for (const item of items.slice(-2)) {
+        for (const item of items.slice(-turns)) {
           if (!item) continue
           const prompt = typeof item.prompt === 'string' ? item.prompt.trim() : ''
           const response = typeof item.response === 'string' ? item.response.trim() : ''
           if (prompt) messages.push({ role: 'user', text: prompt })
           if (response) messages.push({ role: 'assistant', text: response })
         }
-        return { messages: messages.slice(-4), turns: Math.min(items.length, 2) }
+        return { messages: messages.slice(deep ? -10 : -4), turns: Math.min(items.length, turns) }
       } catch (e) {
         return { messages: [], turns: 0 }
+      }
+    }
+
+    /** 从已加载轮次里定向找“选哪个/不要选哪个”的句子，最多 3 条。 */
+    function priorSelectionsFrom(chatSnapshot, draftText) {
+      if (!PRIOR_POINTER_RE.test(String(draftText || ''))) return []
+      try {
+        const items =
+          chatSnapshot && chatSnapshot.navigation && typeof chatSnapshot.navigation.items === 'function'
+            ? chatSnapshot.navigation.items()
+            : []
+        const found = []
+        for (const item of items.slice(-12)) {
+          if (!item) continue
+          const text = [item.prompt, item.response].filter((part) => typeof part === 'string' && part.trim()).join('\n')
+          for (const line of text.split(/[\n。；]/)) {
+            const value = line.trim()
+            if (value && SELECTION_RE.test(value)) found.push(value.slice(0, 160))
+          }
+        }
+        return [...new Set(found)].slice(-3)
+      } catch (e) {
+        return []
       }
     }
 
@@ -229,11 +257,12 @@ window.__ModuleLoader__.load({
      * 同源优先；若桌面壳是 file:// 页面，则回退到经过校验的本机 streamBaseUrl。
      * baseText：首次增强前的原句，用于多次增强时的连续纠正。
      */
-    async function requestEnhance(text, project, sessionId, recentMessages, signal, baseText) {
+    async function requestEnhance(text, project, sessionId, recentMessages, signal, baseText, priorSelections) {
       const payload = { text: text, locale: currentLocale() }
       if (project && project.title) payload.project = { title: project.title }
       if (sessionId) payload.sessionId = sessionId
-      if (recentMessages && recentMessages.length) payload.recent = recentMessages.slice(-4)
+      if (recentMessages && recentMessages.length) payload.recent = recentMessages.slice(-10)
+      if (priorSelections && priorSelections.length) payload.selections = priorSelections.slice(-3)
       if (baseText && baseText !== text) payload.base = baseText
       try {
         return await postJson(ROUTE + '/enhance', payload, 120000, signal)
@@ -416,7 +445,8 @@ window.__ModuleLoader__.load({
         // 多次增强：当前内容仍是上一版增强结果（未被手动改过）时，带上原句做连续纠正
         const lastVersion = undo && undo.versions ? undo.versions[undo.versions.length - 1] : ''
         const baseText = lastVersion && lastVersion === draft ? undo.original : ''
-        const recentInfo = recentMessagesFrom(chatSnapshotRef.current)
+        const recentInfo = recentMessagesFrom(chatSnapshotRef.current, draft)
+        const priorSelections = priorSelectionsFrom(chatSnapshotRef.current, draft)
         setBusy(true)
         setError(null)
         sendDiag('enhance-click', {
@@ -425,8 +455,9 @@ window.__ModuleLoader__.load({
           hasSession: !!sessionId,
           hasBase: !!baseText,
           tokenPresent: !!pageToken(),
+          selections: priorSelections.length,
         })
-        requestEnhance(textAtRequest, project, sessionId, recentInfo.messages, controller.signal, baseText)
+        requestEnhance(textAtRequest, project, sessionId, recentInfo.messages, controller.signal, baseText, priorSelections)
           .then(
             function (result) {
               if (!alive.current || requestSeq.current !== seq || sessionIdRef.current !== requestSession) return

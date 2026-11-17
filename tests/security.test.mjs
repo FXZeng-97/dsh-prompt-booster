@@ -28,6 +28,10 @@ import {
   isShallowVariant,
   modalityIssue,
   looksIncomplete,
+  fidelityIssues,
+  normalizeConfig,
+  runEnhance,
+  selectionsFromBody,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
@@ -35,7 +39,12 @@ import {
 
 let passed = 0
 let failed = 0
+const pending = []
 function test(name, fn) {
+  if (fn && fn.constructor && fn.constructor.name === 'AsyncFunction') {
+    pending.push({ name, fn })
+    return
+  }
   try {
     fn()
     passed += 1
@@ -624,5 +633,144 @@ test('persistent hint skips one-shot tasks', () => {
   assert.equal(buildTaskHint('把这段说明压缩到 100 字以内').includes('持续性任务'), false)
 })
 
-console.log(`\n${passed} passed, ${failed} failed`)
-if (failed > 0) process.exitCode = 1
+/* ---------- 16. 真实增强管线（fake LLM） ---------- */
+function makeFakeLlm(outputs) {
+  const queue = outputs.slice()
+  return {
+    resolveModelInfo: async () => ({ reasoning: { efforts: [] } }),
+    stream() {
+      const text = queue.shift() ?? ''
+      return {
+        async *[Symbol.asyncIterator]() {
+          if (text) yield { type: 'text-delta', text }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      }
+    },
+  }
+}
+
+function makeFakeCtx(llm) {
+  return {
+    get(name) {
+      if (name === 'llm') return llm
+      if (name === 'agentDefaultModel') return { currentSelection: () => ({ provider: 'fake', model: 'fake' }) }
+      return undefined
+    },
+  }
+}
+
+async function runPipeline(text, outputs, base) {
+  const cfg = normalizeConfig({ diag: false })
+  return runEnhance({
+    ctx: makeFakeCtx(makeFakeLlm(outputs)),
+    cfg,
+    text,
+    base: base || '',
+    contextText: '',
+    signal: undefined,
+  })
+}
+
+test('pipeline: normal rewrite returns the model text', async () => {
+  const result = await runPipeline('帮我把这个函数改成异步的', ['请把这个函数改成异步的。'])
+  assert.equal(result.text, '请把这个函数改成异步的。')
+  assert.equal(result.mode, 'fresh')
+})
+
+test('pipeline: answer-like output is retried once', async () => {
+  const result = await runPipeline('怎么把项目发布到 GitHub', [
+    '1. 安装 Git\n2. 执行 git init\n3. 推送',
+    '请说明把项目发布到 GitHub 的步骤。',
+  ])
+  assert.equal(result.answerGuard, 'retried')
+  assert.equal(result.text, '请说明把项目发布到 GitHub 的步骤。')
+})
+
+test('pipeline: correction mode restores weak modality from the original', async () => {
+  const result = await runPipeline(
+    '请在周五前给我 3 个方案，不超过 2 页。',
+    ['请在周五前给我 3 个方案，不超过 2 页。', '请尽量在周五前给我 3 个方案，不超过 2 页。'],
+    '尽量在周五前给我 3 个方案，不要超过 2 页',
+  )
+  assert.equal(result.mode, 'correction')
+  assert.equal(result.text.includes('尽量'), true)
+  assert.equal(result.attempts.some((attempt) => attempt.label === 'fidelity-guard'), true)
+})
+
+test('pipeline: incomplete first output is repaired', async () => {
+  const result = await runPipeline('帮我总结这些内容', ['每个方案都要有。', '请帮我总结这些内容。'])
+  assert.equal(result.text, '请帮我总结这些内容。')
+  assert.equal(result.attempts.some((attempt) => attempt.label === 'incomplete-guard'), true)
+})
+
+test('pipeline: dropped number is retried before returning', async () => {
+  const result = await runPipeline('把这个文档里的 2024 改成 2025', [
+    '请把这个文档里的 2024 改成 2026。',
+    '请把这个文档里的 2024 改成 2025。',
+  ])
+  assert.equal(result.text.includes('2025'), true)
+  assert.equal(result.attempts.some((attempt) => attempt.label === 'structural-guard'), true)
+})
+
+test('pipeline: fabricated prior selection is retried', async () => {
+  const result = await runPipeline('你搜退货申请会出来两个，这俩哪个对也不会判断吗', [
+    '请按我前面已经说明的选择，选中退货申请。',
+    '请搜索退货申请，会出现两个，请直接选中正确的那一个。',
+  ])
+  assert.equal(result.text.includes('按我前面'), false)
+  assert.equal(result.attempts.some((attempt) => attempt.label === 'structural-guard'), true)
+})
+
+test('fidelityIssues catches numbers, negation, source, action owner and fabricated prior', () => {
+  assert.equal(fidelityIssues('把 2024 改成 2025', '改成 2026').some((x) => x.startsWith('number:')), true)
+  assert.equal(fidelityIssues('不要删除数据', '删除数据').includes('negation'), true)
+  assert.equal(fidelityIssues('客户说界面不专业', '界面不专业').includes('source'), true)
+  assert.equal(fidelityIssues('我更新，你验证', '请你更新，然后验证').includes('action-owner'), true)
+  assert.equal(fidelityIssues('你搜两个，这俩哪个对', '按我前面说的选第一个').includes('fabricated-prior'), true)
+})
+test('fidelityIssues accepts digit and Chinese numeral equivalence', () => {
+  assert.deepEqual(fidelityIssues('给我 3 个方案', '给我三个方案'), [])
+  assert.deepEqual(fidelityIssues('给我三个方案', '给我 3 个方案'), [])
+})
+
+test('recent context accepts a deeper window for prior references', () => {
+  const recent = Array.from({ length: 8 }, (_, index) => ({
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    text: 'm' + index,
+  }))
+  assert.equal(recentFromBody({ recent }).count, 4)
+  assert.equal(recentFromBody({ recent }, { maxMessages: 8, totalChars: 1600 }).count, 8)
+})
+
+test('confirmed selections are sanitized and capped', () => {
+  const out = selectionsFromBody({
+    selections: ['选「退货申请」', 123, '', '不要选「试机退货申请」', 'x'.repeat(300)],
+  })
+  assert.equal(out.length, 3)
+  assert.equal(out[0], '选「退货申请」')
+  assert.equal(out[1], '不要选「试机退货申请」')
+  assert.equal(out[2].length, 160)
+})
+
+test('client sends prior selections and deeper recent context', () => {
+  const client = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
+  assert.equal(client.includes('priorSelectionsFrom'), true)
+  assert.equal(client.includes('payload.selections'), true)
+  assert.equal(client.includes('slice(deep ? -10 : -4)'), true)
+})
+
+;(async () => {
+  for (const item of pending) {
+    try {
+      await item.fn()
+      passed += 1
+      console.log(`PASS ${item.name}`)
+    } catch (error) {
+      failed += 1
+      console.log(`FAIL ${item.name}: ${error && error.message}`)
+    }
+  }
+  console.log(`\n${passed} passed, ${failed} failed`)
+  if (failed > 0) process.exitCode = 1
+})()

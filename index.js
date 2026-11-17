@@ -86,7 +86,7 @@ const SYSTEM_PROMPT = [
   "4h. 只要求判断/选择（哪个对/选哪个）时，只写「请判断/请选择」；原文没要求就不要追加「说明依据/分别是什么/各自对应什么情况」。",
   "4i. 草稿明确说「我前面已经说了/刚才说过/按之前说的/我说过」时，必须保留这个引用，把前文已确认的选择写进任务；上下文没有具体选项时保留「按我前面已经说明的选择」即可。若原句没有这个明确引用，不要补前文来源、不要编造选项、不要改写成「判断哪个对」或重新问用户。",
   "4j. 从多个选项里选/点时，动作是「选中/点选/选择正确项」；原文没要求判断对错时，不要写成「请判断哪个对/说明依据」。",
-  "5. 上下文只用来消解指代（「这个插件」「这段说明」「初版」指什么）和核对数据来源；不得用来新增受众、结构、篇幅、格式要求。最近对话按轮取最近 2 轮：以【最近一轮对话】为主（约 65% 参考权重），【更早一轮对话】只作辅助（约 35%）；两者冲突时以最近一轮为准。",
+  "5. 上下文只用来消解指代（「这个插件」「这段说明」「初版」指什么）和核对数据来源；不得用来新增受众、结构、篇幅、格式要求。最近对话按轮取最近 2 轮：以【最近一轮对话】为主（约 65% 参考权重），【更早一轮对话】只作辅助（约 35%）；两者冲突时以最近一轮为准。【前文已确认的选择】是用户已定选择，必须按它执行，不得改选或重新判断；仍不得新增其他要求。",
   "",
   "【目标解析：模糊目标 → 判定维度（通用规则）】",
   "G1. 草稿出现模糊的质量/改进目标（好看、美观、好用、高级、专业、清楚、简洁、流畅、稳定、快、高效、有说服力、优化、改进、提升、整理、美化、体验、效果、质量…）时，先解析目标，再写任务。",
@@ -209,6 +209,80 @@ function looksIncomplete(text) {
   if (/(?:都要有|需要有|要包含|需要包含|应包括|需要包括|要给出|需要给出|要说明|需要说明|包括)[。；！？]?$/.test(value)) return true
   if (/(?:例如|比如|如下|分别是)[：:]?[。；]?$/.test(value)) return true
   return false
+}
+
+/** 0~99 数字转常见中文写法，用于数量/年份之外的小数字保真比对。 */
+function chineseNumeral(value) {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 0 || n > 99) return ''
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  if (n < 10) return digits[n]
+  if (n === 10) return '十'
+  if (n < 20) return '十' + digits[n - 10]
+  const tens = Math.floor(n / 10)
+  const ones = n % 10
+  return digits[tens] + '十' + (ones ? digits[ones] : '')
+}
+
+/** 把 0~99 的中文数字转成阿拉伯数字；无法解析返回 NaN。 */
+function parseChineseNumeral(text) {
+  const value = String(text || '')
+  const digits = { 零: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+  if (value === '十') return 10
+  if (/^十[一二三四五六七八九]$/.test(value)) return 10 + digits[value[1]]
+  if (/^[一二两三四五六七八九]十$/.test(value)) return digits[value[0]] * 10
+  if (/^[一二两三四五六七八九]十[一二三四五六七八九]$/.test(value)) {
+    return digits[value[0]] * 10 + digits[value[2]]
+  }
+  if (/^[零一二两三四五六七八九]$/.test(value)) return digits[value]
+  return NaN
+}
+
+/** 结构保真差异：只查能明确判定的高风险字段，命中后重试，仍失败则报错。 */
+function fidelityIssues(draft, output) {
+  const d = String(draft || '')
+  const o = String(output || '')
+  const issues = []
+  const draftNumbers = [...d.matchAll(/\d+(?:\.\d+)?%?/g)].map((m) => m[0])
+  const missingNumbers = draftNumbers.filter((n) => {
+    if (o.includes(n)) return false
+    const number = Number(n.replace('%', ''))
+    if (Number.isInteger(number) && number >= 0 && number <= 99) {
+      const chinese = chineseNumeral(number)
+      if (chinese && o.includes(chinese)) return false
+    }
+    return true
+  })
+  const draftChineseQuantities = [...d.matchAll(/([一二两三四五六七八九十]+)(个|条|次|天|小时|分钟|字|页|轮|版|步|项|份|种|%)/g)]
+  const missingChinese = draftChineseQuantities.filter((match) => {
+    const raw = match[0]
+    if (o.includes(raw)) return false
+    const number = parseChineseNumeral(match[1])
+    return !Number.isNaN(number) && !o.includes(String(number))
+  })
+  if (missingNumbers.length) issues.push('number:' + [...new Set(missingNumbers)].slice(0, 4).join(','))
+  if (missingChinese.length) issues.push('number:' + [...new Set(missingChinese.map((m) => m[0]))].slice(0, 4).join(','))
+  if (/(不要|别|禁止|不能|不得|避免|无需|不超过|不超|低于|少于)/.test(d) && !/(不要|别|禁止|不能|不得|避免|无需|不超过|不超|低于|少于)/.test(o)) {
+    issues.push('negation')
+  }
+  if (/(客户|老板|领导|他说|她说|原话)/.test(d) && !/(客户|老板|领导|他说|她说|原话)/.test(o)) {
+    issues.push('source')
+  }
+  const draftPrior = /(前面|刚才|之前|上次|已经说|已经讲|我说过)/.test(d)
+  const outputPrior = /(按我前面|前面(?:已经)?(?:说|讲)|我之前(?:说|讲)|上次(?:说|讲))/.test(o)
+  if (outputPrior && !draftPrior) issues.push('fabricated-prior')
+  const ownerAction = /(?:我|我们)(?:先|要|会|来|去|负责)?(?:更新|改|做|处理|检查|验证|跑|写|修|准备)/.test(d)
+  if (
+    ownerAction &&
+    !/(?:我|我们)/.test(o) &&
+    /(?:请|你|您)[^。；\n]{0,6}(?:更新|改|做|处理|检查|验证|跑|写|修|准备)/.test(o)
+  ) {
+    issues.push('action-owner')
+  }
+  if (draftPrior && /(选|哪个|那个)/.test(d) && !/(前面|刚才|之前|上次|已经说|已经讲|按.*说|选中)/.test(o)) {
+    issues.push('prior-selection')
+  }
+  return issues
 }
 
 /** 再次增强与上一版太接近时的两种更强改写提示（先结构、再表达）。 */
@@ -359,7 +433,7 @@ function buildComplexityHints(value) {
 
 /** 情态/句式保真：尽量≠必须，必须≠请，可以…吗≠命令。 */
 const WEAK_MODAL_RE = /(尽量|最好|建议|可以|不妨|可选)/
-const STRONG_MODAL_RE = /(必须|务必|一定|不得|禁止|不能|不要|(?:^|[，。；\s])别(?:$|[，。；\s])|别(?=[动改删覆盖碰用做]))/
+const STRONG_MODAL_RE = /(必须|务必|一定|不得|禁止|不能|不要|不超过|不超|低于|少于|(?:^|[，。；\s])别(?:$|[，。；\s])|别(?=[动改删覆盖碰用做]))/
 const QUESTION_MODAL_RE = /(可以[^。；\n]{0,20}吗|能不能|能否|是否|方便吗)/
 function modalityIssue(draft, output) {
   const d = String(draft || '')
@@ -371,8 +445,7 @@ function modalityIssue(draft, output) {
   const oWeak = WEAK_MODAL_RE.test(o)
   const oStrong = STRONG_MODAL_RE.test(o)
   if (dQuestion && /(确认|回答|是否|能否)/.test(o)) return ''
-  if (dWeak && !dStrong && !oWeak && !oStrong) return 'weak-to-none'
-  if (dWeak && !dStrong && oStrong && !oWeak) return 'weak-to-strong'
+  if (dWeak && !oWeak) return oStrong ? 'weak-to-strong' : 'weak-to-none'
   if (dStrong && !oStrong) return 'strong-to-weak'
   if (dQuestion && !/(确认|回答|是否|能否)/.test(o)) return 'question-to-directive'
   return ''
@@ -1078,14 +1151,22 @@ function formatConversationBlock(label, messages, budget) {
 }
 
 /**
- * 最近对话改为由客户端从当前页面 Chat 视图提取后传入（最多 4 条）。
+ * 最近对话改为由客户端从当前页面 Chat 视图提取后传入（默认最多 4 条，提到前文时最多 8 条）。
  * Host 不再读取任何会话历史，避免凭 sessionId 越权读取其他会话内容。
- * 这里只做结构与长度校验：角色白名单、每条 ≤400 字、总计 ≤800 字。
+ * 这里只做结构与长度校验：角色白名单、每条 ≤400 字、总长按 deep 选项限 800/1600 字。
  */
-function recentFromBody(body) {
+function recentFromBody(body, options) {
   if (!body || !Array.isArray(body.recent)) return { text: '', count: 0 }
+  const maxMessages =
+    options && Number.isInteger(options.maxMessages)
+      ? Math.min(12, Math.max(1, options.maxMessages))
+      : CONVERSATION_MESSAGE_LIMIT
+  const totalChars =
+    options && Number.isInteger(options.totalChars)
+      ? Math.min(2400, Math.max(200, options.totalChars))
+      : CONVERSATION_TOTAL_MAX_CHARS
   const valid = []
-  for (let index = body.recent.length - 1; index >= 0 && valid.length < CONVERSATION_MESSAGE_LIMIT; index -= 1) {
+  for (let index = body.recent.length - 1; index >= 0 && valid.length < maxMessages; index -= 1) {
     const item = body.recent[index]
     if (!item || typeof item !== 'object') continue
     const role = item.role === 'user' || item.role === 'assistant' ? item.role : ''
@@ -1101,19 +1182,33 @@ function recentFromBody(body) {
   let used = 0
   for (let index = valid.length - 1; index >= 0; index -= 1) {
     used += valid[index].text.length
-    if (used > CONVERSATION_TOTAL_MAX_CHARS && valid.length > 1) valid.shift()
+    if (used > totalChars && valid.length > 1) valid.shift()
   }
 
   const recentRound = valid.slice(-2)
   const olderRound = valid.slice(0, Math.max(0, valid.length - 2))
-  const recentBudget = Math.floor(CONVERSATION_TOTAL_MAX_CHARS * CONVERSATION_RECENT_SHARE)
-  const olderBudget = CONVERSATION_TOTAL_MAX_CHARS - recentBudget
+  const recentBudget = Math.floor(totalChars * CONVERSATION_RECENT_SHARE)
+  const olderBudget = totalChars - recentBudget
   const blocks = []
   const olderBlock = formatConversationBlock('更早一轮对话（次要参考）', olderRound, olderBudget)
   if (olderBlock) blocks.push(olderBlock)
   const recentBlock = formatConversationBlock('最近一轮对话（重点参考）', recentRound, recentBudget)
   if (recentBlock) blocks.push(recentBlock)
   return { text: blocks.join('\n\n'), count: valid.length }
+}
+
+/** 定向“已确认选择”候选：只接受字符串，最多 3 条、每条 160 字。 */
+function selectionsFromBody(body) {
+  if (!body || !Array.isArray(body.selections)) return []
+  const out = []
+  for (const raw of body.selections) {
+    if (typeof raw !== 'string') continue
+    const value = raw.trim()
+    if (!value) continue
+    out.push(value.slice(0, 160))
+    if (out.length >= 3) break
+  }
+  return out
 }
 
 /**
@@ -1126,9 +1221,11 @@ function draftNeedsContext(text) {
   const value = String(text || '').trim()
   const length = [...value].length
   const recentPointer = /(这个|那个|它|上述|前面|刚才|上面|就按|那就|这轮|这版)/.test(value)
+  const priorPointer = /(前面|刚才|之前|上次|已经说|已经讲|我说过|这俩|这两个)/.test(value)
   const projectPointer = /(页面|项目|插件|功能|后台|界面|组件|模块|仓库|代码库)/.test(value)
   return {
-    recent: length <= 25 || recentPointer,
+    recent: length <= 25 || recentPointer || priorPointer,
+    deepRecent: priorPointer,
     project: length <= 80 && projectPointer,
   }
 }
@@ -1404,6 +1501,58 @@ async function runEnhance({ ctx, cfg, text, base, contextText, signal }) {
         /* 补全失败：走下一套 plan */
       }
       continue
+    }
+
+    // 结构保真：数量/否定/来源/动作归属/前文选择，重试一次仍失败就报错，不回填失真的提示词
+    const structuralIssues = fidelityIssues(guardDraft, cleaned)
+    if (structuralIssues.length) {
+      diag(cfg.diag, { kind: 'enhance-structural-guard', issues: structuralIssues })
+      try {
+        const guarded = await streamOnce({
+          llm,
+          route,
+          cfg,
+          text: promptText,
+          effort: plan.effort,
+          maxTokens: plan.maxTokens,
+          signal,
+          systemOverride:
+            cfg.systemPrompt +
+            '\n\n' +
+            FIDELITY_GUARD_PROMPT +
+            '\n【必须修正】' +
+            structuralIssues.join('；') +
+            '。保持原意与已有约束，逐项保留；直接输出完整提示词。',
+        })
+        attempts.push({
+          label: 'structural-guard',
+          effort: guarded.effort,
+          maxTokens: plan.maxTokens,
+          finish: guarded.finishReason ? guarded.finishReason.kind : 'none',
+          rawChars: guarded.output.length,
+          ms: guarded.ms,
+        })
+        if (!guarded.finishReason || (guarded.finishReason.kind !== 'error' && guarded.finishReason.kind !== 'aborted')) {
+          const guardedCleaned = cleanOutput(guarded.output)
+          if (
+            guardedCleaned &&
+            !looksIncomplete(guardedCleaned) &&
+            !looksLikeAnswer(guardDraft, guardedCleaned) &&
+            !modalityIssue(guardDraft, guardedCleaned) &&
+            fidelityIssues(guardDraft, guardedCleaned).length === 0
+          ) {
+            return buildResult(guardedCleaned, guarded, 'ok', 'ok')
+          }
+        }
+      } catch {
+        /* 结构保真重试失败：报错，不回填失真结果 */
+      }
+      const structuralError = Object.assign(
+        new Error('输出未通过保真核对：' + structuralIssues.join('；') + '；请换个说法重试'),
+        { status: 502, code: 'FIDELITY_GUARD_FAILED' },
+      )
+      structuralError.detail = { attempts }
+      throw structuralError
     }
 
     const fidelityIssue = modalityIssue(guardDraft, cleaned)
@@ -1707,9 +1856,19 @@ function makeHandler(ctx, cfg) {
               : emptyProjectContext()
           // 最近对话由客户端从当前页面 Chat 视图提取；Host 不再读取会话历史
           const recent =
-            cfg.conversationContext && contextNeeds.recent ? recentFromBody(body) : { text: '', count: 0 }
+            cfg.conversationContext && contextNeeds.recent
+              ? recentFromBody(body, contextNeeds.deepRecent ? { maxMessages: 8, totalChars: 1600 } : undefined)
+              : { text: '', count: 0 }
+          const priorSelections =
+            cfg.conversationContext && contextNeeds.recent ? selectionsFromBody(body) : []
 
           const contextParts = []
+          if (priorSelections.length) {
+            contextParts.push(
+              '【前文已确认的选择】（用户已明确，必须按此执行，不要改选或重新判断）\n- ' +
+                priorSelections.join('\n- '),
+            )
+          }
           if (recent.text) contextParts.push(recent.text)
           if (projectContext.text) {
             contextParts.push(
@@ -1729,6 +1888,7 @@ function makeHandler(ctx, cfg) {
             cwdSource,
             recentCount: recent.count,
             recentChars: recent.text.length,
+            selections: priorSelections.length,
             hasProject: !!projectContext.text,
             hasAgents: projectContext.info.hasAgents,
             hasManifest: projectContext.info.hasManifest,
@@ -1851,6 +2011,10 @@ export {
   bigramSimilarity,
   modalityIssue,
   looksIncomplete,
+  fidelityIssues,
+  normalizeConfig,
+  runEnhance,
+  selectionsFromBody,
   recentFromBody,
   PAGE_TOKEN,
   PAGE_TOKEN_HEADER,
