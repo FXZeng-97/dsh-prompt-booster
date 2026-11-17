@@ -463,6 +463,18 @@ test('light edit does not add audience or marketing requirements', () => {
 test('content creation still gets task profile', () => {
   const hint = buildTaskHint('写一段产品文案')
   assert.equal(hint.includes('任务画像'), true)
+  assert.equal(hint.includes('行动号召'), false)
+  assert.equal(hint.includes('不要自行补'), true)
+})
+test('translation language exception and mechanical length exception are in prompt', () => {
+  const source = readFileSync(new URL('../index.js', import.meta.url), 'utf8')
+  assert.equal(source.includes('翻译任务按原句要求的目标语言输出'), true)
+  assert.equal(source.includes('机械/轻量改写'), true)
+  assert.equal(source.includes('looksLikeAnswer(text'), false)
+})
+test('translation without target language does not assume one', () => {
+  const hint = buildTaskHint('翻译这段文字')
+  assert.equal(hint.includes('不要写具体语言'), true)
 })
 test('outbound hint fixes sender perspective and no invented facts', () => {
   const hint = buildTaskHint('给客户发邮件说项目要延期')
@@ -549,7 +561,7 @@ test('rhetorical question and action directive are preserved', () => {
   const hint = buildTaskHint('你搜退货申请会出来两个，这俩哪个对也不会判断吗')
   assert.equal(hint.includes('反问/质问'), true)
   assert.equal(hint.includes('动作指令'), true)
-  assert.equal(hint.includes('前文决策'), true)
+  assert.equal(hint.includes('前文决策'), false)
   assert.equal(hint.includes('只判断'), false)
 })
 test('explicit prior decision is preserved as selection', () => {
@@ -557,10 +569,10 @@ test('explicit prior decision is preserved as selection', () => {
   assert.equal(hint.includes('前文决策'), true)
   assert.equal(hint.includes('选中'), true)
 })
-test('missing context keeps prior-selection reference instead of inventing options', () => {
+test('missing context does not claim a prior selection', () => {
   const hint = buildTaskHint('你搜退货申请会出来两个，这俩哪个对也不会判断吗')
-  assert.equal(hint.includes('按我前面已经说明的选择'), true)
-  assert.equal(hint.includes('不要编造选项'), true)
+  assert.equal(hint.includes('按我前面已经说明的选择'), false)
+  assert.equal(hint.includes('不要声称前文已说明'), true)
 })
 test('explicit explanation request is not stripped', () => {
   assert.equal(buildTaskHint('判断哪个对，并说明依据').includes('只判断'), false)
