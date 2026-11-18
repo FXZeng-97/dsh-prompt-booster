@@ -503,12 +503,18 @@ test('batch safety is goal-oriented, not a failure ledger', () => {
   assert.equal(hint.includes('失败项汇总'), false)
   assert.equal(hint.includes('下一步'), true)
 })
-test('diagnosis hint includes optimization suggestions', () => {
+test('diagnosis hint includes fix/optimization guidance without forcing ranking', () => {
   const hint = buildTaskHint('分析一下这段代码为什么慢')
-  assert.equal(hint.includes('优化方案'), true)
-  assert.equal(hint.includes('按收益/成本排序'), true)
-  assert.equal(hint.includes('基线'), true)
+  assert.equal(hint.includes('修复/优化建议'), true)
+  assert.equal(hint.includes('只有需要多方案对比/选型时才按收益与成本排序'), true)
+  assert.equal(hint.includes('- 单一缺陷修复'), false)
   assert.equal(hint.includes('只诊断'), false)
+})
+test('single bug fix does not add cost-benefit ranking', () => {
+  const hint = buildTaskHint('我用无线蓝牙耳机连接时，没有背景音播放，状态切换提示音消失，查一下根因并解决')
+  assert.equal(hint.includes('单一缺陷修复'), true)
+  assert.equal(hint.includes('不要追加'), true)
+  assert.equal(hint.includes('多方案对比'), true)
 })
 test('code change hint includes verifiable acceptance', () => {
   const hint = buildTaskHint('帮我把这个函数改成异步的')

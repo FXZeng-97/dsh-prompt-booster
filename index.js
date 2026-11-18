@@ -106,7 +106,7 @@ const SYSTEM_PROMPT = [
   "R2. 常见任务类型的执行契约（按需取用，不要堆砌）：",
   "- 写作/汇报/邮件：结论先行、结构与依据、语气、长度；原句已给读者/目的时保留，未给不补；",
   "- 方案/分析/调研：目标与范围、依据/来源、备选方案与对比、风险与限制、落地步骤、验收标准；",
-  "- 诊断/排障：先定位原因与依据，再给可执行的优化方案（按收益/成本排序）和验证方式；用户明确说「只要原因/不要建议」时才省略；",
+  "- 诊断/排障：先定位原因与依据，再给可执行的修复/优化建议；只有需要多方案对比/选型时才按收益与成本排序，单一缺陷修复不要加排序；用户明确说「只要原因/不要建议」时才省略；",
   "- 代码/脚本/命令：输入输出、边界与异常、运行环境/方式、依赖、验证或测试；",
   "- 设计/视觉/交互：对象与现状、判定维度、约束（品牌/平台/可访问性）、交付形式；",
   "- 计划/排期：目标、里程碑、依赖、资源、风险与缓冲；",
@@ -116,6 +116,7 @@ const SYSTEM_PROMPT = [
   "- 沟通/回复：对象、目的、语气、关键要点、期望行动项；",
   "- 排障/操作：环境、现象、步骤、前置条件、回滚/验证。",
   "R3. 信息缺口：草稿缺少执行必需信息（对象、输入、格式、验收）时，不编造；写成「若缺少 X，先列出缺失项并按合理假设继续，标注假设」。不要把「请用户补充/把原文发我」写进任务。邮件/通知中用户未给的原因、日期、影响、补救措施不能编造；写成「未提供的原因/日期/影响不编造，先列缺失项并按假设标注」，不要写「我未提供」。",
+  "R3b. 单一缺陷修复（查根因并解决、修 bug、修故障）：只写定位原因与依据、修复方案、验证方式；不要追加「按收益/成本排序」、多方案对比或泛化优化建议。只有草稿明确要方案对比/选型时才排序。",
   "R4. 冲突/多目标：要求之间可能冲突时写明优先级或让执行端给取舍方案；多个交付物/目标逐项保留，不合并丢失。",
   "R5. 高风险：涉及删除/覆盖/上线/发布/生产/财务/法律/医疗/隐私/密钥时，任务里要求先确认、备份/回滚、标注依据与不确定性。",
   "R6. 迭代方向：草稿说换方向/重写/否定上一版时，按新方向；说只改某处时，明确保留其余部分。",
@@ -573,7 +574,13 @@ function buildTaskHint(text) {
     : []
   const diagnosisLines =
     /(为什么|原因|慢|瓶颈|排查|诊断)/.test(value) && !/(不要建议|只要原因|别给建议)/.test(value)
-      ? ['- 诊断任务：先定位原因与依据，再给可执行的优化方案（按收益/成本排序）和验证方式（写清基线与测量方法）；用户明确不要建议时才省略。']
+      ? ['- 诊断任务：先定位原因与依据，再给可执行的修复/优化建议；只有需要多方案对比/选型时才按收益与成本排序，单一缺陷修复不要加排序。']
+      : []
+  const bugFixLines =
+    /(根因|bug|故障|报错|异常)/.test(value) &&
+    /(查|排查|定位|解决|修复|修一下)/.test(value) &&
+    !/(方案对比|选型|多个方案|优化建议|收益|成本)/.test(value)
+      ? ['- 单一缺陷修复：只写定位原因/依据、修复方案、验证方式；不要追加“按收益/成本排序”、多方案对比或泛化优化建议。']
       : []
   const visualLines =
     /(好看|美观|视觉|样式|颜色|界面)/.test(value) &&
@@ -597,7 +604,7 @@ function buildTaskHint(text) {
     !/(依据|理由|说明|解释|过程|分别|这俩|两个|选|前面|刚才|之前|上次)/.test(value)
       ? ['- 只判断：只要求给出哪个正确/结论；不要追加「说明依据/分别是什么」等原文没有的要求。']
       : []
-  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length && !lightEditLines.length && !diagnosisLines.length && !visualLines.length && !rhetoricalLines.length && !directiveLines.length && !priorDecisionLines.length && !judgmentLines.length) return ''
+  if (!goal && !audience && !taskType && !risk && !domainLines.length && !complexityLines.length && !fidelityLines.length && !safetyLines.length && !persistentLines.length && !lightEditLines.length && !diagnosisLines.length && !bugFixLines.length && !visualLines.length && !rhetoricalLines.length && !directiveLines.length && !priorDecisionLines.length && !judgmentLines.length) return ''
   const lines = ['【任务解析提示】']
   if (goal) {
     lines.push(
@@ -625,6 +632,7 @@ function buildTaskHint(text) {
   for (const line of persistentLines) lines.push(line)
   for (const line of lightEditLines) lines.push(line)
   for (const line of diagnosisLines) lines.push(line)
+  for (const line of bugFixLines) lines.push(line)
   for (const line of visualLines) lines.push(line)
   for (const line of rhetoricalLines) lines.push(line)
   for (const line of directiveLines) lines.push(line)
