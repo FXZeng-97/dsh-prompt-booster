@@ -510,11 +510,11 @@ test('diagnosis hint includes fix/optimization guidance without forcing ranking'
   assert.equal(hint.includes('- 单一缺陷修复'), false)
   assert.equal(hint.includes('只诊断'), false)
 })
-test('single bug fix does not add cost-benefit ranking', () => {
+test('single bug fix requires execution, not only a plan', () => {
   const hint = buildTaskHint('我用无线蓝牙耳机连接时，没有背景音播放，状态切换提示音消失，查一下根因并解决')
   assert.equal(hint.includes('单一缺陷修复'), true)
-  assert.equal(hint.includes('不要追加'), true)
-  assert.equal(hint.includes('多方案对比'), true)
+  assert.equal(hint.includes('必须执行修复'), true)
+  assert.equal(hint.includes('不能只给方案'), true)
 })
 test('code change hint includes verifiable acceptance', () => {
   const hint = buildTaskHint('帮我把这个函数改成异步的')
